@@ -5,16 +5,19 @@ import { OrderList } from './components/OrderList';
 import { OrderModal } from './components/OrderModal';
 import { ProductList } from './components/ProductList';
 import { ProductModal } from './components/ProductModal';
+import { InventoryModal } from './components/InventoryModal';
+import { InventoryHistory } from './components/InventoryHistory';
 import { CustomerList } from './components/CustomerList';
 import { CustomerModal } from './components/CustomerModal';
 import { AIAssistant } from './components/AIAssistant';
 import { Auth } from './components/Auth';
-import { ViewState, Order, Product, Customer } from './types';
+import { ViewState, Order, Product, Customer, InventoryType, UserRole, InventoryLog } from './types';
 import { dataService } from './services/dataService';
-import { Menu, Bell, Search, Loader2 } from 'lucide-react';
+import { Menu, Bell, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole>('STAFF');
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   const [isLoading, setIsLoading] = useState(false);
   
@@ -22,6 +25,7 @@ const App: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [logs, setLogs] = useState<InventoryLog[]>([]);
 
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -36,6 +40,9 @@ const App: React.FC = () => {
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
+  const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
+  const [selectedProductForInventory, setSelectedProductForInventory] = useState<Product | null>(null);
+
   // Initial Data Fetching
   useEffect(() => {
     if (isAuthenticated) {
@@ -46,19 +53,26 @@ const App: React.FC = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [fetchedOrders, fetchedProducts, fetchedCustomers] = await Promise.all([
+      const [fetchedOrders, fetchedProducts, fetchedCustomers, fetchedLogs] = await Promise.all([
         dataService.getOrders(),
         dataService.getProducts(),
-        dataService.getCustomers()
+        dataService.getCustomers(),
+        dataService.getInventoryLogs()
       ]);
       setOrders(fetchedOrders);
       setProducts(fetchedProducts);
       setCustomers(fetchedCustomers);
+      setLogs(fetchedLogs);
     } catch (error) {
       console.error("Failed to load data", error);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleLoginSuccess = (role: UserRole) => {
+    setUserRole(role);
+    setIsAuthenticated(true);
   };
 
   // --- HANDLERS: ORDERS ---
@@ -79,7 +93,7 @@ const App: React.FC = () => {
     try { await dataService.deleteOrder(id); } catch { loadData(); }
   };
 
-  // --- HANDLERS: PRODUCTS ---
+  // --- HANDLERS: PRODUCTS & INVENTORY ---
   const handleSaveProduct = async (product: Product) => {
     const isEdit = !!editingProduct;
     if (isEdit) setProducts(products.map(p => p.id === product.id ? product : p));
@@ -90,10 +104,64 @@ const App: React.FC = () => {
       else await dataService.createProduct(product);
     } catch { loadData(); }
   };
+  
   const handleDeleteProduct = async (id: string) => {
+    if (userRole !== 'ADMIN') {
+      alert("Chỉ Admin mới có quyền xóa sản phẩm!");
+      return;
+    }
     if (!window.confirm('Xóa sản phẩm này?')) return;
     setProducts(products.filter(p => p.id !== id));
     try { await dataService.deleteProduct(id); } catch { loadData(); }
+  };
+
+  const handleInventoryUpdate = async (
+    product: Product, 
+    type: InventoryType, 
+    quantity: number, 
+    price: number,
+    supplier: string,
+    doc: string,
+    note: string
+  ) => {
+    const newStock = type === 'IMPORT' 
+      ? product.stock + quantity 
+      : Math.max(0, product.stock - quantity);
+
+    // Tính lại giá vốn (Optimistic UI)
+    let newImportPrice = product.importPrice;
+    if (type === 'IMPORT' && price > 0) {
+       const currentVal = product.stock * product.importPrice;
+       const newVal = quantity * price;
+       if (newStock > 0) newImportPrice = (currentVal + newVal) / newStock;
+    }
+
+    // Optimistic Update Product
+    const updatedProduct = { ...product, stock: newStock, importPrice: Math.round(newImportPrice) };
+    setProducts(products.map(p => p.id === product.id ? updatedProduct : p));
+
+    // Optimistic Update Logs
+    const newLog: InventoryLog = {
+      id: `LOG-TEMP-${Date.now()}`,
+      productId: product.id,
+      productName: product.name,
+      type,
+      quantity,
+      oldStock: product.stock,
+      newStock,
+      price,
+      supplier,
+      referenceDoc: doc,
+      note,
+      timestamp: new Date().toISOString()
+    };
+    setLogs([newLog, ...logs]);
+
+    try {
+      await dataService.updateProductStock(product, type, quantity, price, supplier, doc, note);
+    } catch {
+      loadData(); // Revert on fail
+    }
   };
 
   // --- HANDLERS: CUSTOMERS ---
@@ -113,7 +181,7 @@ const App: React.FC = () => {
     try { await dataService.deleteCustomer(id); } catch { loadData(); }
   };
 
-  if (!isAuthenticated) return <Auth onLoginSuccess={() => setIsAuthenticated(true)} />;
+  if (!isAuthenticated) return <Auth onLoginSuccess={handleLoginSuccess} />;
 
   const renderContent = () => {
     if (isLoading && orders.length === 0 && products.length === 0) {
@@ -126,7 +194,7 @@ const App: React.FC = () => {
     }
 
     switch (currentView) {
-      case 'DASHBOARD': return <Dashboard />;
+      case 'DASHBOARD': return <Dashboard userRole={userRole} orders={orders} products={products} />;
       case 'ORDERS':
         return (
           <OrderList 
@@ -143,8 +211,11 @@ const App: React.FC = () => {
             onAddProduct={() => { setEditingProduct(null); setIsProductModalOpen(true); }}
             onEditProduct={(p) => { setEditingProduct(p); setIsProductModalOpen(true); }}
             onDeleteProduct={handleDeleteProduct}
+            onInventoryClick={(p) => { setSelectedProductForInventory(p); setIsInventoryModalOpen(true); }}
           />
         );
+      case 'INVENTORY_LOGS':
+        return <InventoryHistory logs={logs} />;
       case 'CUSTOMERS':
         return (
           <CustomerList
@@ -156,7 +227,7 @@ const App: React.FC = () => {
         );
       case 'AI_ASSISTANT':
         return <AIAssistant orders={orders} products={products} />;
-      default: return <Dashboard />;
+      default: return <Dashboard userRole={userRole} orders={orders} products={products} />;
     }
   };
 
@@ -168,6 +239,7 @@ const App: React.FC = () => {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         onLogout={() => setIsAuthenticated(false)}
+        userRole={userRole}
       />
       
       <main className="flex-1 lg:ml-0 flex flex-col min-w-0 transition-all duration-300">
@@ -179,6 +251,7 @@ const App: React.FC = () => {
                {currentView === 'ORDERS' && 'Quản lý đơn hàng'}
                {currentView === 'AI_ASSISTANT' && 'Trợ lý AI'}
                {currentView === 'PRODUCTS' && 'Kho sản phẩm'}
+               {currentView === 'INVENTORY_LOGS' && 'Lịch sử kho hàng'}
                {currentView === 'CUSTOMERS' && 'Danh sách khách hàng'}
              </h2>
            </div>
@@ -186,8 +259,13 @@ const App: React.FC = () => {
              <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all relative"><Bell size={20} /><span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span></button>
              <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
              <div className="flex items-center gap-3 pl-2 sm:pl-0">
-               <div className="hidden md:flex flex-col items-end"><span className="text-sm font-semibold text-slate-800">Admin User</span><span className="text-xs text-slate-500">Quản lý cấp cao</span></div>
-               <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-md ring-2 ring-white">AD</div>
+               <div className="hidden md:flex flex-col items-end">
+                 <span className="text-sm font-semibold text-slate-800">{userRole === 'ADMIN' ? 'Admin' : 'Staff'}</span>
+                 <span className="text-xs text-slate-500">{userRole === 'ADMIN' ? 'Quản lý cấp cao' : 'Nhân viên bán hàng'}</span>
+               </div>
+               <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-md ring-2 ring-white">
+                 {userRole === 'ADMIN' ? 'AD' : 'ST'}
+               </div>
              </div>
            </div>
         </header>
@@ -215,6 +293,12 @@ const App: React.FC = () => {
         onClose={() => setIsCustomerModalOpen(false)}
         onSave={handleSaveCustomer}
         initialData={editingCustomer}
+      />
+      <InventoryModal
+        isOpen={isInventoryModalOpen}
+        onClose={() => setIsInventoryModalOpen(false)}
+        onConfirm={handleInventoryUpdate}
+        product={selectedProductForInventory}
       />
     </div>
   );

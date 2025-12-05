@@ -1,6 +1,6 @@
 import React from 'react';
-import { LayoutDashboard, ShoppingCart, Package, Users, Bot, Settings, LogOut, X } from 'lucide-react';
-import { ViewState } from '../types';
+import { LayoutDashboard, ShoppingCart, Package, Users, Bot, Settings, LogOut, X, ClipboardList } from 'lucide-react';
+import { ViewState, UserRole } from '../types';
 
 interface SidebarProps {
   currentView: ViewState;
@@ -8,13 +8,15 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onLogout: () => void;
+  userRole: UserRole;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen, onClose, onLogout }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen, onClose, onLogout, userRole }) => {
   const menuItems = [
     { id: 'DASHBOARD', label: 'Tổng quan', icon: LayoutDashboard },
     { id: 'ORDERS', label: 'Đơn hàng', icon: ShoppingCart },
     { id: 'PRODUCTS', label: 'Sản phẩm', icon: Package },
+    { id: 'INVENTORY_LOGS', label: 'Lịch sử kho', icon: ClipboardList },
     { id: 'CUSTOMERS', label: 'Khách hàng', icon: Users },
     { id: 'AI_ASSISTANT', label: 'Trợ lý AI', icon: Bot },
   ];
@@ -43,7 +45,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isO
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-none">SalesPro</h1>
-              <span className="text-xs text-slate-400 font-medium tracking-wide">MANAGEMENT</span>
+              <span className="text-xs text-slate-400 font-medium tracking-wide">
+                {userRole === 'ADMIN' ? 'ADMINISTRATOR' : 'STAFF MEMBER'}
+              </span>
             </div>
           </div>
           <button onClick={onClose} className="lg:hidden p-1 text-slate-400 hover:text-slate-600 rounded-lg">
@@ -77,10 +81,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isO
         </nav>
 
         <div className="p-4 border-t border-slate-50 bg-slate-50/50">
-          <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-white hover:shadow-sm transition-all duration-200 mb-2">
-            <Settings size={20} className="text-slate-400" />
-            <span>Cài đặt hệ thống</span>
-          </button>
+          {userRole === 'ADMIN' && (
+            <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-white hover:shadow-sm transition-all duration-200 mb-2">
+              <Settings size={20} className="text-slate-400" />
+              <span>Cài đặt hệ thống</span>
+            </button>
+          )}
           <button 
             onClick={onLogout}
             className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-all duration-200"

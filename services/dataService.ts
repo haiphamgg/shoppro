@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Order, Product, OrderStatus, Customer } from '../types';
-import { MOCK_ORDERS, MOCK_PRODUCTS } from '../constants';
+import { Order, Product, OrderStatus, Customer, InventoryLog, InventoryType } from '../types';
+import { MOCK_ORDERS, MOCK_PRODUCTS, MOCK_LOGS } from '../constants';
 
 // --- MAPPING HELPERS ---
 
@@ -28,16 +28,22 @@ const mapRowToProduct = (row: any): Product => ({
   id: row.id,
   name: row.name,
   price: Number(row.price) || 0,
+  importPrice: Number(row.import_price) || 0,
   stock: Number(row.stock) || 0,
-  category: row.category || 'Khác'
+  category: row.category || 'Khác',
+  origin: row.origin || 'Chưa rõ',
+  imageUrl: row.image_url || ''
 });
 
 const mapProductToRow = (product: Product) => ({
   id: product.id,
   name: product.name,
   price: product.price,
+  import_price: product.importPrice,
   stock: product.stock,
-  category: product.category
+  category: product.category,
+  origin: product.origin,
+  image_url: product.imageUrl
 });
 
 const mapRowToCustomer = (row: any): Customer => ({
@@ -56,9 +62,48 @@ const mapCustomerToRow = (customer: Customer) => ({
   address: customer.address
 });
 
+const mapRowToLog = (row: any): InventoryLog => ({
+  id: row.id,
+  productId: row.product_id,
+  productName: row.products?.name || 'Unknown Product',
+  type: row.type as InventoryType,
+  quantity: row.quantity,
+  oldStock: row.old_stock,
+  newStock: row.new_stock,
+  price: Number(row.price) || 0,
+  supplier: row.supplier,
+  referenceDoc: row.reference_doc,
+  note: row.note,
+  timestamp: row.created_at
+});
+
 // --- SERVICE ---
 
 export const dataService = {
+  // --- UTILS ---
+  async uploadImage(file: File): Promise<string> {
+    if (!isSupabaseConfigured) {
+      await new Promise(r => setTimeout(r, 1000));
+      return URL.createObjectURL(file);
+    }
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error('Upload Error:', uploadError);
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
+    return data.publicUrl;
+  },
+
   // --- ORDERS ---
   async getOrders(): Promise<Order[]> {
     if (!isSupabaseConfigured) return MOCK_ORDERS;
@@ -98,7 +143,7 @@ export const dataService = {
     if (!isSupabaseConfigured) return MOCK_PRODUCTS;
     try {
       const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-      if (error) return MOCK_PRODUCTS; // Fallback
+      if (error) return MOCK_PRODUCTS; 
       return data && data.length > 0 ? data.map(mapRowToProduct) : MOCK_PRODUCTS;
     } catch { return MOCK_PRODUCTS; }
   },
@@ -119,10 +164,78 @@ export const dataService = {
     return mapRowToProduct(data);
   },
 
+  async updateProductStock(
+    product: Product, 
+    type: InventoryType, 
+    quantity: number, 
+    transactionPrice: number, // Giá nhập hoặc Giá xuất (thường dùng giá nhập để tính Average)
+    supplier: string,
+    referenceDoc: string,
+    note: string
+  ): Promise<void> {
+    const newStock = type === 'IMPORT' ? product.stock + quantity : product.stock - quantity;
+    
+    // TÍNH GIÁ VỐN BÌNH QUÂN (Weighted Average Cost)
+    let newImportPrice = product.importPrice;
+    
+    if (type === 'IMPORT' && transactionPrice > 0) {
+      const currentTotalValue = product.stock * product.importPrice;
+      const newImportValue = quantity * transactionPrice;
+      // Tránh chia cho 0
+      if (newStock > 0) {
+        newImportPrice = (currentTotalValue + newImportValue) / newStock;
+      } else {
+        newImportPrice = transactionPrice;
+      }
+    }
+    // Nếu là EXPORT, giá vốn không đổi, chỉ giảm số lượng.
+
+    if (!isSupabaseConfigured) return;
+
+    // 1. Cập nhật tồn kho & giá vốn mới vào bảng Products
+    const { error: prodError } = await supabase.from('products')
+      .update({ 
+        stock: newStock,
+        import_price: Math.round(newImportPrice) // Làm tròn
+      })
+      .eq('id', product.id);
+      
+    if (prodError) throw prodError;
+
+    // 2. Ghi log chi tiết
+    const { error: logError } = await supabase.from('inventory_logs').insert([{
+      product_id: product.id,
+      type,
+      quantity,
+      old_stock: product.stock,
+      new_stock: newStock,
+      price: transactionPrice,
+      supplier,
+      reference_doc: referenceDoc,
+      note
+    }]);
+    
+    if (logError) console.error("Error logging inventory", logError);
+  },
+
   async deleteProduct(id: string): Promise<void> {
     if (!isSupabaseConfigured) return;
     const { error } = await supabase.from('products').delete().eq('id', id);
     if (error) throw error;
+  },
+
+  // --- INVENTORY LOGS ---
+  async getInventoryLogs(): Promise<InventoryLog[]> {
+    if (!isSupabaseConfigured) return MOCK_LOGS;
+    try {
+      const { data, error } = await supabase
+        .from('inventory_logs')
+        .select(`*, products(name)`)
+        .order('created_at', { ascending: false });
+      
+      if (error) return MOCK_LOGS;
+      return data.map(mapRowToLog);
+    } catch { return MOCK_LOGS; }
   },
 
   // --- CUSTOMERS ---

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { ShieldCheck, Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
+import { UserRole } from '../types';
 
 interface AuthProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (role: UserRole) => void;
 }
 
 export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
@@ -19,15 +20,24 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     setError(null);
 
     try {
-      if (!isSupabaseConfigured) {
-        // Chế độ Demo
+      // 1. HARDCODED DEMO ACCOUNTS
+      if (email === 'admin@demo.com' && password === '123456') {
         await new Promise(r => setTimeout(r, 1000));
-        if (email === 'admin@demo.com' && password === '123456') {
-          onLoginSuccess();
-        } else {
-          // Cho phép đăng nhập demo dễ dàng
-          onLoginSuccess();
-        }
+        onLoginSuccess('ADMIN');
+        return;
+      }
+      
+      if (email === 'staff@demo.com' && password === '123456') {
+        await new Promise(r => setTimeout(r, 1000));
+        onLoginSuccess('STAFF');
+        return;
+      }
+
+      // 2. SUPABASE LOGIC
+      if (!isSupabaseConfigured) {
+        // Fallback for demo without Supabase configured
+        await new Promise(r => setTimeout(r, 1000));
+        onLoginSuccess('ADMIN');
         return;
       }
 
@@ -36,7 +46,17 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
         : await supabase.auth.signUp({ email, password });
 
       if (authError) throw authError;
-      if (data.user) onLoginSuccess();
+
+      if (mode === 'SIGNUP' && data.user && !data.session) {
+        setError('Đăng ký thành công! Vui lòng kiểm tra email.');
+        return;
+      }
+
+      if (data.user) {
+        // Trong thực tế, role sẽ được lấy từ bảng profiles hoặc jwt claim
+        // Tạm thời mặc định là ADMIN cho user mới
+        onLoginSuccess('ADMIN');
+      }
       
     } catch (err: any) {
       setError(err.message || 'Đã xảy ra lỗi');
@@ -92,16 +112,19 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             </div>
 
             {error && (
-              <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center">
-                <span className="mr-2">⚠️</span> {error}
+              <div className={`p-3 text-sm rounded-lg flex items-center ${error.includes('thành công') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                <span className="mr-2">{error.includes('thành công') ? '✅' : '⚠️'}</span> {error}
               </div>
             )}
 
-            {!isSupabaseConfigured && (
-               <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-100">
-                 Demo Mode: Nhập bất kỳ email/pass nào để vào.
+            <div className="text-xs space-y-2">
+               <div className="bg-blue-50 text-blue-800 p-2 rounded border border-blue-100">
+                  <strong>Admin:</strong> admin@demo.com / 123456 <br/> (Full quyền)
                </div>
-            )}
+               <div className="bg-slate-50 text-slate-700 p-2 rounded border border-slate-200">
+                  <strong>Nhân viên:</strong> staff@demo.com / 123456 <br/> (Bán hàng, không xem giá vốn)
+               </div>
+            </div>
 
             <button
               type="submit"
@@ -119,7 +142,10 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
 
           <div className="mt-6 text-center">
             <button 
-              onClick={() => setMode(mode === 'LOGIN' ? 'SIGNUP' : 'LOGIN')}
+              onClick={() => {
+                setMode(mode === 'LOGIN' ? 'SIGNUP' : 'LOGIN');
+                setError(null);
+              }}
               className="text-sm text-slate-500 hover:text-blue-600 font-medium transition-colors"
             >
               {mode === 'LOGIN' 

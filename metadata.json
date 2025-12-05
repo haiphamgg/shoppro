@@ -1,5 +1,5 @@
 {
-  "name": "SalesPro - Quản Lý Bán Hàng",
+  "name": "SalesPro",
   "description": "Hệ thống quản lý bán hàng chuyên nghiệp dành cho SMEs. Bao gồm quản lý đơn hàng, khách hàng, báo cáo doanh thu và trợ lý AI thông minh.",
   "requestFramePermissions": [
     "microphone"
