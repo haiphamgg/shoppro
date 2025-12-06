@@ -250,7 +250,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                             onClick={() => addToCart(p, type === 'IMPORT' ? (p.importPrice || 0) : p.price)}
                                         >
                                             <div>
-                                                <div className="text-sm font-medium text-slate-800">{p.name}</div>
+                                                <div className="text-sm font-medium text-slate-800">
+                                                    {p.name} {p.model && <span className="text-xs text-slate-500">({p.model})</span>}
+                                                </div>
                                                 <div className="text-xs text-slate-500">Tồn: {p.stock}</div>
                                             </div>
                                             <Plus size={16} className="text-blue-600" />
@@ -287,7 +289,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                         {item.product.imageUrl ? <img src={item.product.imageUrl} className="w-full h-full object-cover rounded-lg" /> : <Package size={20} className="text-slate-400" />}
                                      </div>
                                      <div className="flex-1 min-w-0 pt-1">
-                                         <h4 className="text-sm font-bold text-slate-800 truncate" title={item.product.name}>{item.product.name}</h4>
+                                         <h4 className="text-sm font-bold text-slate-800 truncate" title={item.product.name}>
+                                             {item.product.name} {item.product.model && <span className="text-slate-500 font-normal">({item.product.model})</span>}
+                                         </h4>
                                          <p className={`text-xs ${isError ? 'text-red-600 font-bold' : 'text-slate-500'}`}>
                                             Tồn hiện tại: {item.product.stock}
                                          </p>

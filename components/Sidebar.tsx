@@ -83,8 +83,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isO
 
         <div className="p-4 border-t border-slate-50 bg-slate-50/50">
           {userRole === 'ADMIN' && (
-            <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-white hover:shadow-sm transition-all duration-200 mb-2">
-              <Settings size={20} className="text-slate-400" />
+            <button 
+              onClick={() => {
+                onChangeView('SETTINGS' as ViewState);
+                if (window.innerWidth < 1024) onClose();
+              }}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 mb-2 ${
+                currentView === 'SETTINGS' 
+                  ? 'bg-blue-50 text-blue-700 shadow-sm font-medium' 
+                  : 'text-slate-600 hover:bg-white hover:shadow-sm'
+              }`}
+            >
+              <Settings size={20} className={currentView === 'SETTINGS' ? 'text-blue-600' : 'text-slate-400'} />
               <span>Cài đặt hệ thống</span>
             </button>
           )}

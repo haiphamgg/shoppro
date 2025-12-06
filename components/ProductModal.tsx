@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Package, DollarSign, Layers, Tag, Globe, Upload, Image as ImageIcon, Loader2, TrendingUp, Save, XCircle, FileText, Link as LinkIcon, Box, FileUp, CheckCircle, Barcode, RefreshCw, Download, Printer } from 'lucide-react';
+import { X, Package, DollarSign, Layers, Tag, Globe, Upload, Image as ImageIcon, Loader2, TrendingUp, Save, XCircle, FileText, Link as LinkIcon, Box, FileUp, CheckCircle, Barcode, RefreshCw, Download, Printer, ScanBarcode, UploadCloud, Cpu, Eye } from 'lucide-react';
 import { Product } from '../types';
 import { dataService } from '../services/dataService';
 
@@ -20,9 +20,15 @@ const parseNumber = (str: string) => {
   return Number(str.replace(/\./g, '').replace(/[^0-9]/g, ''));
 };
 
+const isImageUrl = (url: string) => {
+    if (!url) return false;
+    return /\.(jpg|jpeg|png|webp|gif|bmp|svg)$/i.test(url) || url.startsWith('data:image');
+};
+
 export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
+  const [model, setModel] = useState('');
   const [price, setPrice] = useState<number>(0);
   const [importPrice, setImportPrice] = useState<number>(0);
   const [stock, setStock] = useState<number>(0);
@@ -37,6 +43,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
   const [description, setDescription] = useState('');
   const [catalogUrl, setCatalogUrl] = useState('');
   const [catalogFile, setCatalogFile] = useState<File | null>(null);
+  const [catalogPreview, setCatalogPreview] = useState<string>('');
 
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +60,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
       if (initialData) {
         setCode(initialData.code || '');
         setName(initialData.name);
+        setModel(initialData.model || '');
         setPrice(initialData.price);
         setImportPrice(initialData.importPrice || 0);
         setStock(initialData.stock);
@@ -64,10 +72,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
         setBatchNumber(initialData.batchNumber || '');
         setDescription(initialData.description || '');
         setCatalogUrl(initialData.catalogUrl || '');
+        // Check if existing catalog is an image to show preview
+        if (initialData.catalogUrl && isImageUrl(initialData.catalogUrl)) {
+             setCatalogPreview(initialData.catalogUrl);
+        } else {
+             setCatalogPreview('');
+        }
       } else {
         // AUTO GENERATE CODE FOR NEW PRODUCTS
         setCode(generateCode());
         setName('');
+        setModel('');
         setPrice(0);
         setImportPrice(0);
         setStock(0);
@@ -78,6 +93,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
         setBatchNumber('');
         setDescription('');
         setCatalogUrl('');
+        setCatalogPreview('');
       }
       setImageFile(null);
       setCatalogFile(null);
@@ -96,7 +112,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
       if (e.target.files && e.target.files[0]) {
           const file = e.target.files[0];
           setCatalogFile(file);
-          setCatalogUrl(''); 
+          setCatalogUrl('');
+          
+          // If uploaded file is image, create preview
+          if (file.type.startsWith('image/')) {
+              setCatalogPreview(URL.createObjectURL(file));
+          } else {
+              setCatalogPreview('');
+          }
       }
   };
 
@@ -119,6 +142,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
 
       // Upload catalog if a new file is selected
       if (catalogFile) {
+        // Use generic bucket for docs or images
         finalCatalogUrl = await dataService.uploadFile(catalogFile, 'product-images');
       }
       
@@ -129,6 +153,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
         id: initialData ? initialData.id : `TEMP-${Date.now()}`,
         code: finalCode,
         name,
+        model,
         price: Number(price) || 0,
         importPrice: Number(importPrice) || 0,
         stock: Number(stock) || 0,
@@ -151,44 +176,42 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
     }
   };
 
-  // QR Code URL (using a public API for display)
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${code}`;
-
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-100">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
           <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <Package size={20} className="text-blue-600" />
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Package size={20} />
+            </div>
             {initialData ? 'Cập nhật sản phẩm' : 'Thêm sản phẩm mới'}
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-full transition-all">
             <X size={24} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto flex flex-col md:flex-row">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto flex flex-col md:flex-row bg-slate-50/30">
             {/* LEFT COLUMN: Main Info */}
-            <div className="flex-1 p-6 space-y-6 border-r border-slate-100">
+            <div className="flex-1 p-6 space-y-6 border-r border-slate-100 bg-white">
                 
-                {/* 1. Basic Info Section */}
                 <div className="flex gap-6 flex-col sm:flex-row">
                     {/* Image Upload Area */}
                     <div className="flex-shrink-0 flex flex-col items-center">
                     <div 
-                        className="w-full sm:w-32 h-32 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 hover:border-blue-400 transition-all relative overflow-hidden group"
+                        className="w-full sm:w-36 h-36 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition-all relative overflow-hidden group"
                         onClick={() => fileInputRef.current?.click()}
                     >
                         {previewUrl ? (
                         <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
                         ) : (
                         <>
-                            <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                            <Upload size={16} />
+                            <div className="w-10 h-10 bg-white text-blue-600 rounded-full shadow-sm flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                            <UploadCloud size={20} />
                             </div>
-                            <p className="text-[10px] text-slate-500 font-medium text-center px-2">Ảnh SP</p>
+                            <p className="text-xs text-slate-500 font-medium text-center px-2">Ảnh sản phẩm</p>
                         </>
                         )}
                         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
@@ -198,12 +221,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                     <div className="flex-1 space-y-4">
                         <div className="flex gap-3">
                             <div className="w-2/5">
-                                <label className="block text-sm font-medium text-slate-700 mb-1.5">Mã SP (Tự động)</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Mã SP</label>
                                 <div className="relative flex items-center">
-                                    <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                     <input
                                         type="text"
-                                        className="w-full pl-9 pr-10 py-2.5 border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all uppercase font-bold text-slate-700"
+                                        className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all uppercase font-bold text-slate-700 tracking-wide"
                                         value={code}
                                         onChange={(e) => setCode(e.target.value.toUpperCase())}
                                         placeholder="P00000"
@@ -211,7 +234,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                                     <button 
                                         type="button" 
                                         onClick={handleRegenerateCode}
-                                        className="absolute right-2 p-1 text-slate-400 hover:text-blue-600 transition-colors"
+                                        className="absolute right-2 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                                         title="Tạo mã mới"
                                     >
                                         <RefreshCw size={16} />
@@ -219,11 +242,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                                 </div>
                             </div>
                             <div className="flex-1">
-                                <label className="block text-sm font-medium text-slate-700 mb-1.5">Tên sản phẩm <span className="text-red-500">*</span></label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Tên sản phẩm <span className="text-red-500">*</span></label>
                                 <input
                                     type="text"
                                     required
-                                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
+                                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     placeholder="Nhập tên sản phẩm..."
@@ -233,13 +256,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
 
                         <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1.5">Giá bán</label>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Giá bán</label>
                             <div className="relative">
-                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                             <input
                                 type="text"
                                 required
-                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-semibold text-blue-600"
+                                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-bold text-blue-600"
                                 value={formatNumber(price)}
                                 onChange={(e) => setPrice(parseNumber(e.target.value))}
                                 placeholder="0"
@@ -247,13 +270,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1.5">Giá vốn</label>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Giá vốn</label>
                             <div className="relative">
-                            <TrendingUp className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <TrendingUp className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                             <input
                                 type="text"
                                 required
-                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-600"
+                                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-600 font-medium"
                                 value={formatNumber(importPrice)}
                                 onChange={(e) => setImportPrice(parseNumber(e.target.value))}
                                 placeholder="0"
@@ -264,13 +287,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Danh mục</label>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-1">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Danh mục</label>
                     <div className="relative">
-                        <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <select
-                        className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all appearance-none bg-white"
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all appearance-none bg-white cursor-pointer"
                         value={category}
                         onChange={(e) => setCategory(e.target.value)}
                         >
@@ -283,54 +306,67 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                         <option value="Khác">Khác</option>
                         </select>
                     </div>
-                    </div>
-                    <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Hãng / Nước SX</label>
+                  </div>
+                  <div className="col-span-1">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Model / Kiểu dáng</label>
                     <div className="relative">
-                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <Cpu className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input
                         type="text"
-                        className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                        placeholder="VD: 2024, Slim..."
+                        />
+                    </div>
+                  </div>
+                  <div className="col-span-1">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Nước SX</label>
+                    <div className="relative">
+                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input
+                        type="text"
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
                         value={origin}
                         onChange={(e) => setOrigin(e.target.value)}
                         placeholder="Việt Nam"
                         />
                     </div>
-                    </div>
+                  </div>
                 </div>
 
                 {/* Advanced Info */}
-                <div className="border-t border-slate-100 pt-4">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                      <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                        <Layers size={16} className="text-blue-600"/>
+                        <Layers size={18} className="text-blue-600"/>
                         Thông tin kho hàng
                     </h4>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-4">
                         <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">Tồn kho ban đầu</label>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Tồn kho ban đầu</label>
                             <input
                                 type="number"
                                 min="0"
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none text-sm"
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none text-sm bg-white"
                                 value={stock}
                                 onChange={(e) => setStock(Number(e.target.value))}
                                 disabled={!!initialData} 
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">Số lô / Batch</label>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Số lô / Batch</label>
                             <input
                                 type="text"
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none text-sm"
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none text-sm bg-white"
                                 value={batchNumber}
                                 onChange={(e) => setBatchNumber(e.target.value)}
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">Hạn sử dụng</label>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Hạn sử dụng</label>
                             <input
                                 type="date"
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none text-sm"
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none text-sm bg-white"
                                 value={expiryDate}
                                 onChange={(e) => setExpiryDate(e.target.value)}
                             />
@@ -339,91 +375,95 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                 </div>
             </div>
 
-            {/* RIGHT COLUMN: QR & Details */}
-            <div className="w-full md:w-80 bg-slate-50/50 p-6 flex flex-col">
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center mb-6">
-                    <h4 className="text-sm font-bold text-slate-700 mb-3 w-full text-center border-b border-slate-100 pb-2">Mã QR Sản Phẩm</h4>
-                    {code ? (
-                        <>
-                            <div className="bg-white p-2 border border-slate-100 rounded-lg mb-2">
-                                <img src={qrCodeUrl} alt="QR Code" className="w-32 h-32 object-contain" />
-                            </div>
-                            <div className="text-center mb-3">
-                                <div className="text-lg font-mono font-bold text-slate-800 tracking-wider">{code}</div>
-                                <div className="text-xs text-slate-500">{name || 'Chưa có tên'}</div>
-                            </div>
-                            <div className="flex gap-2 w-full">
-                                <button type="button" className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-1">
-                                    <Printer size={14} /> In nhãn
-                                </button>
-                                <button type="button" className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors flex items-center justify-center gap-1">
-                                    <Download size={14} /> Tải về
-                                </button>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="w-32 h-32 flex items-center justify-center text-slate-300 bg-slate-50 rounded-lg">
-                            <RefreshCw className="animate-spin" />
-                        </div>
-                    )}
-                </div>
-
+            {/* RIGHT COLUMN: Extra Details */}
+            <div className="w-full md:w-80 bg-slate-50 p-6 flex flex-col space-y-6">
+                
                 <div className="space-y-4 flex-1">
                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Tài liệu / Catalogue</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 flex justify-between">
+                          Catalogue / Tài liệu
+                          <span className="text-[10px] font-normal lowercase bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">PDF, Ảnh, Excel...</span>
+                      </label>
                       <div className="relative mb-2">
-                            <LinkIcon className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                            <LinkIcon className="absolute left-3 top-2.5 text-slate-400" size={16} />
                             <input
                                 type="url"
-                                className={`w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-2 outline-none ${catalogFile ? 'bg-slate-100 border-slate-200 text-slate-400' : 'border-slate-200'}`}
+                                className={`w-full pl-9 pr-3 py-2.5 border rounded-xl text-sm focus:ring-2 outline-none transition-all ${catalogFile ? 'bg-slate-100 border-slate-200 text-slate-400' : 'bg-white border-slate-200 focus:border-blue-500 focus:ring-blue-500/20'}`}
                                 value={catalogUrl}
                                 onChange={(e) => setCatalogUrl(e.target.value)}
-                                placeholder="URL tài liệu..."
+                                placeholder="Hoặc dán link..."
                                 disabled={!!catalogFile}
                             />
                       </div>
+                      
+                      {/* Image Preview Area for Catalog */}
+                      {catalogPreview && (
+                          <div className="mb-2 w-full h-32 bg-slate-200 rounded-xl overflow-hidden border border-slate-300 relative group">
+                              <img src={catalogPreview} alt="Catalog Preview" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-medium">
+                                  Preview
+                              </div>
+                          </div>
+                      )}
+
                       <button 
                             type="button" 
                             onClick={() => catalogInputRef.current?.click()}
-                            className={`w-full py-2 border rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-colors ${catalogFile ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                            className={`w-full py-2.5 border border-dashed rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors ${catalogFile ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400'}`}
                         >
-                            <FileUp size={14} />
-                            {catalogFile ? `Đã chọn: ${catalogFile.name}` : 'Tải tệp lên'}
+                            {catalogFile ? (
+                                <>
+                                    <CheckCircle size={16} />
+                                    <span className="truncate max-w-[150px]">{catalogFile.name}</span>
+                                </>
+                            ) : (
+                                <>
+                                    <FileUp size={16} />
+                                    Tải file lên
+                                </>
+                            )}
                       </button>
-                      <input type="file" ref={catalogInputRef} className="hidden" onChange={handleCatalogChange} accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" />
+                      <input 
+                        type="file" 
+                        ref={catalogInputRef} 
+                        className="hidden" 
+                        onChange={handleCatalogChange} 
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" 
+                      />
                    </div>
                    
-                   <div className="flex-1">
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Mô tả / Ghi chú</label>
+                   <div className="flex-1 flex flex-col">
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Mô tả chi tiết</label>
                       <textarea
-                        className="w-full p-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none resize-none h-32"
+                        className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none h-40 bg-white"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Nhập thông tin chi tiết..."
+                        placeholder="Nhập thông tin chi tiết về sản phẩm..."
                       />
                    </div>
                 </div>
-
-                <div className="mt-6 flex justify-end gap-3">
-                    <button
-                    type="button"
-                    onClick={onClose}
-                    disabled={isUploading}
-                    className="px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 font-medium hover:bg-white transition-colors disabled:opacity-50 flex items-center gap-2 text-sm"
-                    >
-                    Hủy
-                    </button>
-                    <button
-                    type="submit"
-                    disabled={isUploading}
-                    className="px-6 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed text-sm"
-                    >
-                    {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                    {initialData ? 'Lưu' : 'Tạo mới'}
-                    </button>
-                </div>
             </div>
         </form>
+
+        <div className="p-4 border-t border-slate-100 bg-white flex justify-end gap-3 z-10">
+            <button
+            type="button"
+            onClick={onClose}
+            disabled={isUploading}
+            className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 hover:text-slate-800 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+            <XCircle size={18} />
+            Hủy bỏ
+            </button>
+            <button
+            onClick={handleSubmit}
+            disabled={isUploading}
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold hover:shadow-lg hover:shadow-blue-500/30 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+            {isUploading ? <Loader2 size={18} className="animate-spin" /> : (initialData ? <Save size={18} /> : <CheckCircle size={18} />)}
+            {initialData ? 'Lưu thay đổi' : 'Tạo mới'}
+            </button>
+        </div>
       </div>
     </div>
   );

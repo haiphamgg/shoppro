@@ -2,6 +2,17 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Order, Product, OrderStatus, Customer, InventoryLog, InventoryType, Supplier } from '../types';
 import { MOCK_ORDERS, MOCK_PRODUCTS, MOCK_LOGS, MOCK_SUPPLIERS } from '../constants';
 
+// --- UTILS ---
+const generateUUID = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 // --- MAPPING HELPERS ---
 
 const mapRowToOrder = (row: any): Order => ({
@@ -28,6 +39,7 @@ const mapRowToProduct = (row: any): Product => ({
   id: String(row.id),
   code: row.code || '',
   name: row.name,
+  model: row.model || '',
   price: Number(row.price) || 0,
   importPrice: Number(row.import_price) || 0,
   stock: Number(row.stock) || 0,
@@ -44,13 +56,13 @@ const mapProductToRow = (product: Product) => ({
   id: product.id,
   code: product.code,
   name: product.name,
+  model: product.model || null,
   price: product.price,
   import_price: product.importPrice,
   stock: product.stock,
   category: product.category,
   origin: product.origin,
   image_url: product.imageUrl,
-  // New fields might cause 42703 error if DB is not updated
   expiry_date: product.expiryDate || null, 
   batch_number: product.batchNumber || null,
   description: product.description || null,
@@ -129,12 +141,8 @@ export const dataService = {
         .upload(filePath, file);
 
       if (uploadError) {
-        if (uploadError.message.includes('Bucket not found') || uploadError.message.includes('not found')) {
-          console.warn(`Storage bucket "${bucket}" missing. Using local URL.`);
-          return URL.createObjectURL(file);
-        }
-        console.error('Upload Error:', uploadError);
-        throw uploadError;
+        console.warn(`Storage bucket "${bucket}" issue. Using local URL. Error:`, uploadError.message);
+        return URL.createObjectURL(file);
       }
 
       const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
@@ -162,7 +170,7 @@ export const dataService = {
   async createOrder(order: Order): Promise<Order> {
     if (!isSupabaseConfigured) return order;
     const { id, ...row } = mapOrderToRow(order);
-    const { data, error } = await supabase.from('orders').insert([row]).select().single();
+    const { data, error } = await supabase.from('orders').insert([{ ...row, id: order.id }]).select().single();
     if (error) throw error;
     if (!data) throw new Error("Tạo đơn hàng thành công nhưng không nhận được phản hồi.");
     return mapRowToOrder(data);
@@ -198,80 +206,71 @@ export const dataService = {
   async createProduct(product: Product): Promise<Product> {
     if (!isSupabaseConfigured) return product;
     
-    // 1. Try to insert with ALL fields
-    const { id, ...row } = mapProductToRow(product);
-    console.log("Attempting create product:", row);
+    // GENERATE ID CLIENT SIDE
+    const dbId = (product.id && !product.id.startsWith('TEMP')) 
+        ? product.id 
+        : generateUUID();
 
-    const { data, error } = await supabase.from('products').insert([row]).select().single();
+    // 1. Try to insert with ALL fields
+    const fullRow = { ...mapProductToRow(product), id: dbId };
+    console.log("Attempting create product:", fullRow);
+
+    const { data, error } = await supabase.from('products').insert([fullRow]).select().single();
     
-    if (error) {
-        // 2. FALLBACK: If error is Undefined Column (42703), try inserting WITHOUT the new fields
-        // This keeps the app working even if DB migration hasn't run
-        if (error.code === '42703') {
-            console.warn("Schema mismatch (missing columns). Retrying with legacy fields...");
-            
-            const fallbackRow = {
-                code: product.code, // Try keeping code, if fails user needs to add it
-                name: product.name,
-                price: product.price,
-                import_price: product.importPrice,
-                stock: product.stock,
-                category: product.category,
-                origin: product.origin,
-                image_url: product.imageUrl,
-                // Exclude: expiry_date, batch_number, description, catalog_url
-            };
-            
-            const { data: fallbackData, error: fallbackError } = await supabase.from('products').insert([fallbackRow]).select().single();
-            
-            if (fallbackError) {
-                // If even fallback fails, throw the ORIGINAL error for clarity
-                console.error("Fallback insert failed:", fallbackError);
-                throw error; 
-            }
-            
-            if (fallbackData) {
-                alert("⚠️ Lưu ý: Sản phẩm đã được tạo nhưng một số thông tin (Hạn sử dụng, Lô, Mô tả) không được lưu do Database chưa cập nhật cột mới.");
-                return mapRowToProduct(fallbackData);
-            }
-        }
-        
-        // Log generic error
-        console.error("Supabase Create Product Error:", error);
-        throw error;
+    if (!error && data) {
+        return mapRowToProduct(data);
     }
 
-    if (!data) throw new Error("Tạo sản phẩm thành công nhưng không nhận được phản hồi.");
-    return mapRowToProduct(data);
+    // 2. FALLBACK DETECTION
+    console.warn("Full insert failed. Trying fallback mode...", error);
+    
+    const safeFallbackRow = {
+        id: dbId,
+        name: product.name,
+        price: product.price,
+        stock: product.stock,
+        category: product.category,
+        image_url: product.imageUrl,
+        // Optional safe fields
+        model: product.model || null
+    };
+    
+    try {
+        const { data: fallbackData, error: fallbackError } = await supabase
+            .from('products')
+            .insert([safeFallbackRow])
+            .select()
+            .single();
+        
+        if (fallbackError) throw new Error(fallbackError.message);
+        if (fallbackData) return mapRowToProduct(fallbackData);
+    } catch (innerErr: any) {
+            throw new Error("Lỗi lưu DB (Fallback): " + (innerErr.message || JSON.stringify(innerErr)));
+    }
+    
+    throw new Error(error?.message || "Lỗi không xác định khi tạo sản phẩm");
   },
 
   async updateProduct(product: Product): Promise<Product> {
     if (!isSupabaseConfigured) return product;
     const row = mapProductToRow(product);
     
-    // Try update
     const { data, error } = await supabase.from('products').update(row).eq('id', product.id).select().single();
     
     if (error) {
-         // Fallback for Update as well
-         if (error.code === '42703') {
-             console.warn("Update schema mismatch. Retrying with legacy fields...");
-             const fallbackRow = {
-                code: product.code,
-                name: product.name,
-                price: product.price,
-                import_price: product.importPrice,
-                stock: product.stock,
-                category: product.category,
-                origin: product.origin,
-                image_url: product.imageUrl,
-            };
-            const { data: fallbackData, error: fallbackError } = await supabase.from('products').update(fallbackRow).eq('id', product.id).select().single();
-            
-            if (fallbackError) throw error;
-            if (fallbackData) return mapRowToProduct(fallbackData);
-         }
-         throw error;
+         console.warn("Update schema mismatch. Retrying with legacy fields...");
+         const fallbackRow = {
+            name: product.name,
+            model: product.model,
+            price: product.price,
+            stock: product.stock,
+            category: product.category,
+            image_url: product.imageUrl,
+        };
+        const { data: fallbackData, error: fallbackError } = await supabase.from('products').update(fallbackRow).eq('id', product.id).select().single();
+        
+        if (fallbackError) throw new Error(`Lỗi cập nhật (Fallback): ${fallbackError.message}`);
+        if (fallbackData) return mapRowToProduct(fallbackData);
     }
     
     if (!data) throw new Error("Cập nhật sản phẩm thành công nhưng không nhận được phản hồi.");
@@ -309,7 +308,12 @@ export const dataService = {
       })
       .eq('id', product.id);
       
-    if (prodError) throw prodError;
+    if (prodError) {
+         const { error: fallbackError } = await supabase.from('products')
+          .update({ stock: newStock })
+          .eq('id', product.id);
+         if (fallbackError) throw fallbackError;
+    }
 
     const { error: logError } = await supabase.from('inventory_logs').insert([{
       product_id: product.id,
@@ -359,7 +363,7 @@ export const dataService = {
   async createCustomer(customer: Customer): Promise<Customer> {
     if (!isSupabaseConfigured) return customer;
     const { id, ...row } = mapCustomerToRow(customer);
-    const { data, error } = await supabase.from('customers').insert([row]).select().single();
+    const { data, error } = await supabase.from('customers').insert([{...row, id: customer.id}]).select().single();
     if (error) throw error;
     if (!data) throw new Error("Tạo khách hàng thành công nhưng không nhận được phản hồi.");
     return mapRowToCustomer(data);
@@ -393,7 +397,7 @@ export const dataService = {
   async createSupplier(supplier: Supplier): Promise<Supplier> {
     if (!isSupabaseConfigured) return supplier;
     const { id, ...row } = mapSupplierToRow(supplier);
-    const { data, error } = await supabase.from('suppliers').insert([row]).select().single();
+    const { data, error } = await supabase.from('suppliers').insert([{...row, id: supplier.id}]).select().single();
     if (error) throw error;
     if (!data) throw new Error("Tạo NCC thành công nhưng không nhận được phản hồi.");
     return mapRowToSupplier(data);

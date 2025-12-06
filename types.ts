@@ -36,6 +36,7 @@ export interface Product {
   id: string; // Database UUID
   code: string; // Business ID (e.g. P001)
   name: string;
+  model?: string; // Mẫu mã / Model
   price: number; // Giá bán
   importPrice: number; // Giá vốn (Giá nhập bình quân)
   stock: number;
@@ -73,7 +74,7 @@ export interface SalesData {
   orders: number;
 }
 
-export type ViewState = 'DASHBOARD' | 'ORDERS' | 'PRODUCTS' | 'CUSTOMERS' | 'SUPPLIERS' | 'INVENTORY_LOGS' | 'AI_ASSISTANT';
+export type ViewState = 'DASHBOARD' | 'ORDERS' | 'PRODUCTS' | 'CUSTOMERS' | 'SUPPLIERS' | 'INVENTORY_LOGS' | 'AI_ASSISTANT' | 'SETTINGS';
 
 export type InventoryType = 'IMPORT' | 'EXPORT';
 
