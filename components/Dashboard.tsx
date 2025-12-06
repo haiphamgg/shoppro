@@ -1,6 +1,6 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { ArrowUpRight, ArrowDownRight, DollarSign, ShoppingBag, Users, Activity, TrendingUp, Package } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, DollarSign, ShoppingBag, Users, Activity, TrendingUp, Package, Warehouse } from 'lucide-react';
 import { SALES_DATA } from '../constants';
 import { Order, Product, UserRole } from '../types';
 
@@ -19,6 +19,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ userRole, orders, products
   const totalRevenue = orders.filter(o => o.status !== 'Đã hủy').reduce((acc, curr) => acc + curr.totalAmount, 0);
   const totalOrders = orders.length;
   
+  // Inventory Calculations
+  const totalStock = products.reduce((acc, p) => acc + p.stock, 0);
+  const totalInventoryValue = products.reduce((acc, p) => acc + (p.stock * (p.importPrice || 0)), 0);
+
   let totalProfit = 0;
   if (userRole === 'ADMIN') {
     orders.filter(o => o.status !== 'Đã hủy').forEach(order => {
@@ -39,7 +43,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userRole, orders, products
       <div className="flex justify-between items-start relative z-10">
         <div>
           <p className="text-sm font-semibold text-slate-500 mb-1">{title}</p>
-          <h3 className="text-3xl font-bold text-slate-800 tracking-tight">{value}</h3>
+          <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">{value}</h3>
         </div>
         <div className={`p-3 rounded-xl ${iconColor} bg-opacity-10`}>
           <Icon size={24} className={iconColor.replace('bg-', 'text-')} />
@@ -47,11 +51,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ userRole, orders, products
       </div>
       
       <div className="flex items-center mt-4 relative z-10">
-        <span className={`flex items-center text-sm font-bold ${trend === 'up' ? 'text-emerald-500' : 'text-rose-500'} bg-opacity-10 px-2 py-0.5 rounded-lg mr-2`}>
-          {trend === 'up' ? <ArrowUpRight size={16} className="mr-1" /> : <ArrowDownRight size={16} className="mr-1" />}
+        <span className={`flex items-center text-sm font-bold ${trend === 'up' ? 'text-emerald-500' : 'text-slate-500'} bg-opacity-10 px-2 py-0.5 rounded-lg mr-2`}>
+          {trend === 'up' ? <ArrowUpRight size={16} className="mr-1" /> : (trend === 'down' ? <ArrowDownRight size={16} className="mr-1" /> : null)}
           {subtext}
         </span>
-        <span className="text-xs text-slate-400 font-medium">so với tháng trước</span>
       </div>
     </div>
   );
@@ -74,7 +77,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userRole, orders, products
         <StatCard 
           title="Tổng Doanh Thu" 
           value={formatCurrency(totalRevenue)} 
-          subtext="12.5%" 
+          subtext="+12.5% tháng này" 
           icon={DollarSign} 
           trend="up"
           colorFrom="from-blue-500"
@@ -86,7 +89,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userRole, orders, products
           <StatCard 
             title="Lợi Nhuận Ròng" 
             value={formatCurrency(totalProfit)} 
-            subtext="8.4%" 
+            subtext="+8.4% tháng này" 
             icon={TrendingUp} 
             trend="up" 
             colorFrom="from-emerald-400"
@@ -97,7 +100,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ userRole, orders, products
           <StatCard 
             title="Đơn Hàng Mới" 
             value={totalOrders} 
-            subtext="5.2%" 
+            subtext="+5.2% hôm nay" 
             icon={ShoppingBag} 
             trend="up" 
             colorFrom="from-violet-500"
@@ -107,22 +110,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ userRole, orders, products
         )}
 
         <StatCard 
-          title="Khách Hàng" 
-          value="128" 
-          subtext="2.4%" 
-          icon={Users} 
-          trend="up" 
+          title="Giá Trị Kho Hàng" 
+          value={formatCurrency(totalInventoryValue)} 
+          subtext={`Tổng ${totalStock} sản phẩm`}
+          icon={Warehouse} 
+          trend="neutral"
           colorFrom="from-orange-400"
           colorTo="to-amber-500"
           iconColor="bg-orange-500 text-orange-600"
         />
         
         <StatCard 
-          title="Sản Phẩm Tồn" 
-          value={products.reduce((acc, p) => acc + p.stock, 0).toLocaleString()} 
-          subtext="Kho ổn định" 
-          icon={Package} 
-          trend="down" 
+          title="Khách Hàng" 
+          value="128" 
+          subtext="+3 mới hôm nay" 
+          icon={Users} 
+          trend="up" 
           colorFrom="from-pink-500"
           colorTo="to-rose-500"
           iconColor="bg-rose-500 text-rose-600"

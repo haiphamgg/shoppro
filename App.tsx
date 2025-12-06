@@ -11,9 +11,11 @@ import { CustomerList } from './components/CustomerList';
 import { CustomerModal } from './components/CustomerModal';
 import { SupplierList } from './components/SupplierList';
 import { SupplierModal } from './components/SupplierModal';
+import { UserList } from './components/UserList';
+import { UserModal } from './components/UserModal';
 import { AIAssistant } from './components/AIAssistant';
 import { Auth } from './components/Auth';
-import { ViewState, Order, Product, Customer, InventoryType, UserRole, InventoryLog, Supplier } from './types';
+import { ViewState, Order, Product, Customer, InventoryType, UserRole, InventoryLog, Supplier, User } from './types';
 import { dataService } from './services/dataService';
 import { Menu, Bell, Loader2, Database, ShieldAlert, Copy, Check } from 'lucide-react';
 
@@ -35,6 +37,16 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
 
 -- Cập nhật bảng Inventory Logs
 ALTER TABLE inventory_logs ADD COLUMN IF NOT EXISTS date TIMESTAMPTZ DEFAULT now();
+
+-- Tạo bảng Users (nếu dùng quản lý user riêng biệt)
+CREATE TABLE IF NOT EXISTS app_users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  role TEXT DEFAULT 'STAFF',
+  phone TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
 -- Sửa lỗi ID không tự động tạo (Optional)
 ALTER TABLE products ALTER COLUMN id SET DEFAULT gen_random_uuid();
@@ -117,6 +129,7 @@ const App: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [logs, setLogs] = useState<InventoryLog[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
 
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -137,6 +150,9 @@ const App: React.FC = () => {
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
   const [selectedProductForInventory, setSelectedProductForInventory] = useState<Product | null>(null);
 
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+
   // Initial Data Fetching
   useEffect(() => {
     if (isAuthenticated) {
@@ -147,18 +163,20 @@ const App: React.FC = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [fetchedOrders, fetchedProducts, fetchedCustomers, fetchedSuppliers, fetchedLogs] = await Promise.all([
+      const [fetchedOrders, fetchedProducts, fetchedCustomers, fetchedSuppliers, fetchedLogs, fetchedUsers] = await Promise.all([
         dataService.getOrders(),
         dataService.getProducts(),
         dataService.getCustomers(),
         dataService.getSuppliers(),
-        dataService.getInventoryLogs()
+        dataService.getInventoryLogs(),
+        userRole === 'ADMIN' ? dataService.getUsers() : Promise.resolve([])
       ]);
       setOrders(fetchedOrders);
       setProducts(fetchedProducts);
       setCustomers(fetchedCustomers);
       setSuppliers(fetchedSuppliers);
       setLogs(fetchedLogs);
+      setUsers(fetchedUsers);
     } catch (error) {
       console.error("Failed to load data", error);
     } finally {
@@ -175,22 +193,25 @@ const App: React.FC = () => {
   const handleSaveError = (error: any, context: string) => {
     console.error(`Error saving ${context}:`, error);
     
-    let message = '';
+    let message = 'Lỗi không xác định';
 
-    if (typeof error === 'string') {
-        message = error;
-    } else if (error instanceof Error) {
+    if (error instanceof Error) {
         message = error.message;
+    } else if (typeof error === 'string') {
+        message = error;
     } else if (typeof error === 'object' && error !== null) {
-        // Supabase error format
+        // Handle Supabase error object
         message = error.message || error.details || error.hint || JSON.stringify(error);
-    } else {
-        message = 'Lỗi không xác định';
     }
 
-    // Clean up weird JSON dump
-    if (message.startsWith('{') || message.includes('[object Object]')) {
-        message = "Hệ thống gặp lỗi kết nối hoặc dữ liệu không hợp lệ.";
+    // Clean up generic object dump
+    if (message === '{}' || message.includes('[object Object]')) {
+        message = "Hệ thống gặp lỗi kết nối hoặc bảng dữ liệu chưa được khởi tạo.";
+    }
+
+    // Friendly message for missing table
+    if (message.includes('relation') && message.includes('does not exist')) {
+        message = `Bảng dữ liệu cho "${context}" chưa được khởi tạo trong Database.\nVui lòng vào "Cài đặt hệ thống" và chạy lệnh SQL sửa lỗi.`;
     }
 
     alert(`⚠️ Không thể lưu ${context}:\n${message}`);
@@ -269,7 +290,7 @@ const App: React.FC = () => {
     supplier: string,
     doc: string,
     note: string,
-    date: string // New param
+    date: string
   ) => {
     // Optimistic Update Loop
     const updatedProducts = [...products];
@@ -385,6 +406,37 @@ const App: React.FC = () => {
     }
   };
 
+  // --- HANDLERS: USERS ---
+  const handleSaveUser = async (user: User) => {
+    if (userRole !== 'ADMIN') return;
+    const isEdit = !!editingUser;
+    if (isEdit) setUsers(users.map(u => u.id === user.id ? user : u));
+    else setUsers([user, ...users]);
+
+    try {
+      if (isEdit) {
+        await dataService.updateUser(user);
+      } else {
+        const newUser = await dataService.createUser(user);
+        setUsers(prev => prev.map(u => u.id === user.id ? newUser : u));
+      }
+    } catch (error: any) {
+      handleSaveError(error, 'Nhân viên');
+      if (!isEdit) setUsers(prev => prev.filter(u => u.id !== user.id));
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (userRole !== 'ADMIN') return;
+    if (!window.confirm('Xóa nhân viên này?')) return;
+    setUsers(users.filter(u => u.id !== id));
+    try { 
+      await dataService.deleteUser(id); 
+    } catch (error: any) {
+      handleSaveError(error, 'Xóa nhân viên');
+    }
+  };
+
   if (!isAuthenticated) return <Auth onLoginSuccess={handleLoginSuccess} />;
 
   const renderContent = () => {
@@ -438,6 +490,15 @@ const App: React.FC = () => {
             onDeleteSupplier={handleDeleteSupplier}
           />
         );
+      case 'USERS':
+        return (
+          <UserList
+            users={users}
+            onAddUser={() => { setEditingUser(null); setIsUserModalOpen(true); }}
+            onEditUser={(u) => { setEditingUser(u); setIsUserModalOpen(true); }}
+            onDeleteUser={handleDeleteUser}
+          />
+        );
       case 'AI_ASSISTANT':
         return <AIAssistant orders={orders} products={products} />;
       // @ts-ignore - 'SETTINGS' might not be in ViewState type yet, but we handle it here
@@ -470,6 +531,7 @@ const App: React.FC = () => {
                {currentView === 'INVENTORY_LOGS' && 'Lịch sử kho hàng'}
                {currentView === 'CUSTOMERS' && 'Danh sách khách hàng'}
                {currentView === 'SUPPLIERS' && 'Danh sách Nhà cung cấp'}
+               {currentView === 'USERS' && 'Quản lý nhân sự'}
                {/* @ts-ignore */}
                {currentView === 'SETTINGS' && 'Cài đặt hệ thống'}
              </h2>
@@ -530,6 +592,12 @@ const App: React.FC = () => {
         products={products}
         customers={customers}
         suppliers={suppliers}
+      />
+      <UserModal
+        isOpen={isUserModalOpen}
+        onClose={() => setIsUserModalOpen(false)}
+        onSave={handleSaveUser}
+        initialData={editingUser}
       />
     </div>
   );

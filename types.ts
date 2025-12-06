@@ -10,8 +10,13 @@ export enum OrderStatus {
 export type UserRole = 'ADMIN' | 'STAFF';
 
 export interface User {
+  id: string; // Database UUID
   email: string;
+  name: string;
   role: UserRole;
+  phone?: string;
+  password?: string; // Only for creating/mocking, strictly handled in real auth
+  createdAt?: string;
 }
 
 export interface Customer {
@@ -75,7 +80,7 @@ export interface SalesData {
   orders: number;
 }
 
-export type ViewState = 'DASHBOARD' | 'ORDERS' | 'PRODUCTS' | 'CUSTOMERS' | 'SUPPLIERS' | 'INVENTORY_LOGS' | 'AI_ASSISTANT' | 'SETTINGS';
+export type ViewState = 'DASHBOARD' | 'ORDERS' | 'PRODUCTS' | 'CUSTOMERS' | 'SUPPLIERS' | 'INVENTORY_LOGS' | 'AI_ASSISTANT' | 'SETTINGS' | 'USERS';
 
 export type InventoryType = 'IMPORT' | 'EXPORT';
 

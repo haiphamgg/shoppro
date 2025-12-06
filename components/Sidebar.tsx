@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, ShoppingCart, Package, Users, Bot, Settings, LogOut, X, ClipboardList, Truck } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Users, Bot, Settings, LogOut, X, ClipboardList, Truck, Shield } from 'lucide-react';
 import { ViewState, UserRole } from '../types';
 
 interface SidebarProps {
@@ -21,6 +21,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isO
     { id: 'SUPPLIERS', label: 'Nhà cung cấp', icon: Truck },
     { id: 'AI_ASSISTANT', label: 'Trợ lý AI', icon: Bot },
   ];
+
+  // Only add User management for Admins
+  if (userRole === 'ADMIN') {
+      menuItems.splice(6, 0, { id: 'USERS', label: 'Nhân sự', icon: Shield });
+  }
 
   const sidebarClasses = `
     fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-100 shadow-xl lg:shadow-none lg:border-r 

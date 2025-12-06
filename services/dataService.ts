@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Order, Product, OrderStatus, Customer, InventoryLog, InventoryType, Supplier } from '../types';
-import { MOCK_ORDERS, MOCK_PRODUCTS, MOCK_LOGS, MOCK_SUPPLIERS } from '../constants';
+import { Order, Product, OrderStatus, Customer, InventoryLog, InventoryType, Supplier, User } from '../types';
+import { MOCK_ORDERS, MOCK_PRODUCTS, MOCK_LOGS, MOCK_SUPPLIERS, MOCK_USERS } from '../constants';
 
 // --- UTILS ---
 const generateUUID = () => {
@@ -121,6 +121,15 @@ const mapRowToLog = (row: any): InventoryLog => ({
   note: row.note,
   date: row.date || row.created_at, // Use date column or fallback to created_at
   timestamp: row.created_at
+});
+
+const mapRowToUser = (row: any): User => ({
+  id: String(row.id),
+  email: row.email,
+  name: row.name,
+  role: row.role,
+  phone: row.phone || '',
+  createdAt: row.created_at
 });
 
 // --- SERVICE ---
@@ -422,6 +431,51 @@ export const dataService = {
   async deleteSupplier(id: string): Promise<void> {
     if (!isSupabaseConfigured) return;
     const { error } = await supabase.from('suppliers').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // --- USERS ---
+  async getUsers(): Promise<User[]> {
+    if (!isSupabaseConfigured) return MOCK_USERS;
+    try {
+      // NOTE: Using a custom table 'app_users' instead of direct auth.users for simple management view
+      const { data, error } = await supabase.from('app_users').select('*').order('created_at', { ascending: false });
+      if (error) return MOCK_USERS;
+      return data ? data.map(mapRowToUser) : [];
+    } catch { return MOCK_USERS; }
+  },
+
+  async createUser(user: User): Promise<User> {
+    if (!isSupabaseConfigured) return user;
+    // In a real app, you would create user in Supabase Auth via Admin API or invite
+    // Here we simulate by adding to app_users table
+    const row = {
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone
+    };
+    const { data, error } = await supabase.from('app_users').insert([row]).select().single();
+    if (error) throw error;
+    return mapRowToUser(data);
+  },
+
+  async updateUser(user: User): Promise<User> {
+    if (!isSupabaseConfigured) return user;
+    const row = {
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone
+    };
+    const { data, error } = await supabase.from('app_users').update(row).eq('id', user.id).select().single();
+    if (error) throw error;
+    return mapRowToUser(data);
+  },
+
+  async deleteUser(id: string): Promise<void> {
+    if (!isSupabaseConfigured) return;
+    const { error } = await supabase.from('app_users').delete().eq('id', id);
     if (error) throw error;
   }
 };

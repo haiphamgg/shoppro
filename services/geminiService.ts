@@ -2,7 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 import { Order, Product } from '../types';
 
 const getClient = () => {
-  const apiKey = process.env.API_KEY;
+  // Ưu tiên sử dụng biến môi trường, nếu không có thì dùng key hardcode (theo yêu cầu user)
+  const apiKey = process.env.API_KEY || 'AIzaSyCAsqTRelkmV_lvmo8UE2nXL2oAuRO8OXA';
   if (!apiKey) {
     throw new Error("API Key is missing");
   }
@@ -49,6 +50,6 @@ export const analyzeBusinessData = async (
     return response.text || "Xin lỗi, tôi không thể tạo phản hồi lúc này.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Đã xảy ra lỗi khi kết nối với trợ lý AI. Vui lòng kiểm tra API Key hoặc thử lại sau.";
+    return "Đã xảy ra lỗi khi kết nối với trợ lý AI. Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.";
   }
 };

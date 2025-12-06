@@ -20,9 +20,9 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     setError(null);
 
     try {
-      // 1. HARDCODED DEMO ACCOUNTS (UPDATED)
+      // 1. HARDCODED DEMO ACCOUNTS (Hidden logic for demo purposes)
       if (email === 'admin' && password === 'admin') {
-        await new Promise(r => setTimeout(r, 800)); // Giả lập loading nhẹ
+        await new Promise(r => setTimeout(r, 800)); // Simulate loading
         onLoginSuccess('ADMIN');
         return;
       }
@@ -53,6 +53,8 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
       }
 
       if (data.user) {
+        // In real app, fetch role from public.users table based on data.user.id
+        // For now, default to ADMIN
         onLoginSuccess('ADMIN');
       }
       
@@ -86,7 +88,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 <input
                   type="text"
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none"
-                  placeholder="admin"
+                  placeholder="Nhập email của bạn"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
@@ -101,7 +103,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 <input
                   type="password"
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none"
-                  placeholder="admin"
+                  placeholder="••••••••"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
@@ -114,19 +116,6 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 <span className="mr-2">{error.includes('thành công') ? '✅' : '⚠️'}</span> {error}
               </div>
             )}
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-               <div className="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors" onClick={() => { setEmail('admin'); setPassword('admin'); }}>
-                  <div className="font-bold mb-1">Quản trị viên</div>
-                  <div>TK: admin</div>
-                  <div>MK: admin</div>
-               </div>
-               <div className="bg-slate-50 text-slate-700 p-2.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => { setEmail('demo'); setPassword('demo'); }}>
-                  <div className="font-bold mb-1">Nhân viên</div>
-                  <div>TK: demo</div>
-                  <div>MK: demo</div>
-               </div>
-            </div>
 
             <button
               type="submit"

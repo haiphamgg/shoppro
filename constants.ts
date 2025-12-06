@@ -1,5 +1,5 @@
 
-import { Order, OrderStatus, Product, SalesData, InventoryLog, Supplier, Customer } from './types';
+import { Order, OrderStatus, Product, SalesData, InventoryLog, Supplier, Customer, User } from './types';
 
 export const MOCK_PRODUCTS: Product[] = [
   { 
@@ -120,4 +120,10 @@ export const MOCK_SUPPLIERS: Supplier[] = [
   { id: '1', code: 'S001', name: 'Công ty Thực Phẩm Sạch', phone: '02838640800', email: 'orders@cleanfood.vn', address: 'KCN Tân Bình, HCM' },
   { id: '2', code: 'S002', name: 'Kho Hàng Gia Dụng Tổng Hợp', phone: '0909123456', email: 'sales@giadung.com', address: 'Q12, TP.HCM' },
   { id: '3', code: 'S003', name: 'Xưởng May Mặc Thời Trang', phone: '0987654321', email: 'fashion@workshop.vn', address: 'Hóc Môn, TP.HCM' }
+];
+
+export const MOCK_USERS: User[] = [
+  { id: '1', name: 'Administrator', email: 'admin', role: 'ADMIN', phone: '0909000000', createdAt: '2023-01-01T00:00:00Z' },
+  { id: '2', name: 'Nhân viên bán hàng', email: 'demo', role: 'STAFF', phone: '0909123123', createdAt: '2023-06-15T00:00:00Z' },
+  { id: '3', name: 'Trần Văn Tú', email: 'tu.tran@salespro.vn', role: 'STAFF', phone: '0912345678', createdAt: '2023-08-20T00:00:00Z' }
 ];
