@@ -9,14 +9,27 @@ export enum OrderStatus {
 
 export type UserRole = 'ADMIN' | 'STAFF';
 
+export type Permission = 
+  | 'VIEW_DASHBOARD'
+  | 'VIEW_ORDERS'
+  | 'MANAGE_ORDERS' 
+  | 'VIEW_PRODUCTS'
+  | 'MANAGE_PRODUCTS'
+  | 'VIEW_CUSTOMERS'
+  | 'VIEW_SUPPLIERS'
+  | 'VIEW_INVENTORY'
+  | 'MANAGE_INVENTORY'
+  | 'VIEW_AI_ASSISTANT';
+
 export interface User {
   id: string; // Database UUID
   email: string;
   name: string;
   role: UserRole;
   phone?: string;
-  password?: string; // Only for creating/mocking, strictly handled in real auth
+  password?: string; // Only for creating/mocking/resetting
   createdAt?: string;
+  permissions?: Permission[]; // List of specific permissions
 }
 
 export interface Customer {

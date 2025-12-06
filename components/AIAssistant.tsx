@@ -22,7 +22,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ orders, products }) =>
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Xin chào! Tôi là trợ lý AI SalesPro. Tôi có thể giúp bạn phân tích doanh thu, tìm kiếm đơn hàng hoặc soạn thảo email cho khách hàng. Bạn cần giúp gì hôm nay?',
+      content: 'Xin chào! Tôi là trợ lý AI Shop Khuyên Tai Buôn Hồ. Tôi có thể giúp bạn phân tích doanh thu, tìm kiếm đơn hàng hoặc soạn thảo email cho khách hàng. Bạn cần giúp gì hôm nay?',
       timestamp: new Date()
     }
   ]);

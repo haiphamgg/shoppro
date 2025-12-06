@@ -1,6 +1,6 @@
 import React from 'react';
-import { LayoutDashboard, ShoppingCart, Package, Users, Bot, Settings, LogOut, X, ClipboardList, Truck, Shield } from 'lucide-react';
-import { ViewState, UserRole } from '../types';
+import { LayoutDashboard, ShoppingCart, Package, Users, Bot, Settings, LogOut, X, ClipboardList, Truck, Shield, KeyRound } from 'lucide-react';
+import { ViewState, UserRole, User, Permission } from '../types';
 
 interface SidebarProps {
   currentView: ViewState;
@@ -9,23 +9,38 @@ interface SidebarProps {
   onClose: () => void;
   onLogout: () => void;
   userRole: UserRole;
+  user?: User | null;
+  onChangePassword: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen, onClose, onLogout, userRole }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen, onClose, onLogout, userRole, user, onChangePassword }) => {
+  // Helper to check permissions
+  const hasPermission = (requiredPermission: Permission) => {
+    if (userRole === 'ADMIN') return true;
+    if (!user || !user.permissions) return false;
+    return user.permissions.includes(requiredPermission);
+  };
+
   const menuItems = [
-    { id: 'DASHBOARD', label: 'Tổng quan', icon: LayoutDashboard },
-    { id: 'ORDERS', label: 'Đơn hàng', icon: ShoppingCart },
-    { id: 'PRODUCTS', label: 'Sản phẩm', icon: Package },
-    { id: 'INVENTORY_LOGS', label: 'Lịch sử kho', icon: ClipboardList },
-    { id: 'CUSTOMERS', label: 'Khách hàng', icon: Users },
-    { id: 'SUPPLIERS', label: 'Nhà cung cấp', icon: Truck },
-    { id: 'AI_ASSISTANT', label: 'Trợ lý AI', icon: Bot },
+    { id: 'DASHBOARD', label: 'Tổng quan', icon: LayoutDashboard, permission: 'VIEW_DASHBOARD' as Permission },
+    { id: 'ORDERS', label: 'Đơn hàng', icon: ShoppingCart, permission: 'VIEW_ORDERS' as Permission },
+    { id: 'PRODUCTS', label: 'Sản phẩm', icon: Package, permission: 'VIEW_PRODUCTS' as Permission },
+    { id: 'INVENTORY_LOGS', label: 'Lịch sử kho', icon: ClipboardList, permission: 'VIEW_INVENTORY' as Permission },
+    { id: 'CUSTOMERS', label: 'Khách hàng', icon: Users, permission: 'VIEW_CUSTOMERS' as Permission },
+    { id: 'SUPPLIERS', label: 'Nhà cung cấp', icon: Truck, permission: 'VIEW_SUPPLIERS' as Permission },
+    { id: 'AI_ASSISTANT', label: 'Trợ lý AI', icon: Bot, permission: 'VIEW_AI_ASSISTANT' as Permission },
   ];
 
   // Only add User management for Admins
   if (userRole === 'ADMIN') {
-      menuItems.splice(6, 0, { id: 'USERS', label: 'Nhân sự', icon: Shield });
+      menuItems.splice(6, 0, { id: 'USERS', label: 'Nhân sự', icon: Shield, permission: 'VIEW_DASHBOARD' as Permission }); // Admin always has view dashboard implies base access
   }
+
+  // Filter items based on user permissions
+  const visibleMenuItems = menuItems.filter(item => {
+    if (userRole === 'ADMIN') return true;
+    return hasPermission(item.permission);
+  });
 
   const sidebarClasses = `
     fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-100 shadow-xl lg:shadow-none lg:border-r 
@@ -62,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isO
         </div>
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          {menuItems.map((item) => {
+          {visibleMenuItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
             return (
@@ -103,6 +118,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isO
               <span>Cài đặt hệ thống</span>
             </button>
           )}
+          
+          <button 
+            onClick={onChangePassword}
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-white hover:shadow-sm transition-all duration-200 mb-2"
+          >
+            <KeyRound size={20} className="text-slate-400" />
+            <span>Đổi mật khẩu</span>
+          </button>
+
           <button 
             onClick={onLogout}
             className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-all duration-200"

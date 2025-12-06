@@ -13,9 +13,10 @@ import { SupplierList } from './components/SupplierList';
 import { SupplierModal } from './components/SupplierModal';
 import { UserList } from './components/UserList';
 import { UserModal } from './components/UserModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { AIAssistant } from './components/AIAssistant';
 import { Auth } from './components/Auth';
-import { ViewState, Order, Product, Customer, InventoryType, UserRole, InventoryLog, Supplier, User } from './types';
+import { ViewState, Order, Product, Customer, InventoryType, UserRole, InventoryLog, Supplier, User, Permission } from './types';
 import { dataService } from './services/dataService';
 import { Menu, Bell, Loader2, Database, ShieldAlert, Copy, Check } from 'lucide-react';
 
@@ -23,7 +24,34 @@ import { Menu, Bell, Loader2, Database, ShieldAlert, Copy, Check } from 'lucide-
 const SystemSettings: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const sqlCommand = `
--- Cập nhật bảng Products với các cột mới
+-- 1. Tạo bảng Inventory Logs nếu chưa tồn tại
+CREATE TABLE IF NOT EXISTS inventory_logs (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  product_id TEXT,
+  type TEXT,
+  quantity NUMERIC,
+  old_stock NUMERIC,
+  new_stock NUMERIC,
+  price NUMERIC,
+  supplier TEXT,
+  reference_doc TEXT,
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  date TIMESTAMPTZ DEFAULT now()
+);
+
+-- 2. Bổ sung các cột thiếu (QUAN TRỌNG: Sửa lỗi 'Could not find column')
+ALTER TABLE inventory_logs ADD COLUMN IF NOT EXISTS old_stock NUMERIC;
+ALTER TABLE inventory_logs ADD COLUMN IF NOT EXISTS new_stock NUMERIC;
+ALTER TABLE inventory_logs ADD COLUMN IF NOT EXISTS price NUMERIC;
+ALTER TABLE inventory_logs ADD COLUMN IF NOT EXISTS date TIMESTAMPTZ DEFAULT now();
+
+-- (Đã xóa lệnh set default ID để tránh lỗi type mismatch UUID/TEXT)
+
+-- Fix: Tắt RLS để đảm bảo dữ liệu luôn hiển thị
+ALTER TABLE inventory_logs DISABLE ROW LEVEL SECURITY;
+
+-- 3. Cập nhật bảng Products
 ALTER TABLE products ADD COLUMN IF NOT EXISTS import_price NUMERIC DEFAULT 0;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS code TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS model TEXT;
@@ -35,10 +63,7 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_url TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS origin TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
 
--- Cập nhật bảng Inventory Logs
-ALTER TABLE inventory_logs ADD COLUMN IF NOT EXISTS date TIMESTAMPTZ DEFAULT now();
-
--- Tạo bảng Users (nếu dùng quản lý user riêng biệt)
+-- 4. Tạo bảng Users (nếu dùng quản lý user riêng biệt)
 CREATE TABLE IF NOT EXISTS app_users (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
@@ -48,10 +73,11 @@ CREATE TABLE IF NOT EXISTS app_users (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Sửa lỗi ID không tự động tạo (Optional)
-ALTER TABLE products ALTER COLUMN id SET DEFAULT gen_random_uuid();
+-- 5. Cập nhật bảng Users cho phân quyền và mật khẩu
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS permissions JSONB;
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS password TEXT;
 
--- Reload Schema Cache
+-- 6. Reload Schema Cache (Bắt buộc để Supabase nhận diện cột mới)
 NOTIFY pgrst, 'reload config';
   `.trim();
 
@@ -79,17 +105,14 @@ NOTIFY pgrst, 'reload config';
            Trạng thái Database
         </h3>
         <p className="text-sm text-amber-700 mb-3">
-           Nếu bạn gặp lỗi <strong>"Could not find column"</strong>, <strong>"import_price"</strong> hoặc <strong>"model"</strong>, 
-           nguyên nhân là do Database chưa đồng bộ cấu trúc mới.
-        </p>
-        <p className="text-sm text-amber-700 font-medium">
-           Hãy chạy lệnh SQL bên dưới trên Supabase để sửa toàn bộ lỗi.
+           Nếu bạn gặp lỗi <strong>"Could not find column"</strong> hoặc <strong>"ERROR: 42804"</strong>, 
+           nghĩa là cấu trúc bảng chưa đồng bộ. Hãy chạy lệnh SQL bên dưới để khắc phục.
         </p>
       </div>
 
       <div>
         <div className="flex justify-between items-center mb-2">
-           <label className="text-sm font-bold text-slate-700">Lệnh SQL sửa lỗi (Chạy 1 lần duy nhất)</label>
+           <label className="text-sm font-bold text-slate-700">Lệnh SQL sửa lỗi (Copy và chạy trong Supabase)</label>
            <button 
              onClick={handleCopy}
              className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-bold hover:bg-blue-100 transition-colors"
@@ -103,15 +126,6 @@ NOTIFY pgrst, 'reload config';
             {sqlCommand}
           </pre>
         </div>
-        <div className="mt-4 text-sm text-slate-500">
-           <strong>Hướng dẫn:</strong>
-           <ol className="list-decimal list-inside mt-2 space-y-1 ml-1">
-             <li>Đăng nhập vào <a href="https://supabase.com/dashboard" target="_blank" className="text-blue-600 hover:underline">Supabase Dashboard</a>.</li>
-             <li>Chọn Project hiện tại.</li>
-             <li>Vào mục <strong>SQL Editor</strong> ở menu bên trái.</li>
-             <li>Dán đoạn mã trên vào và nhấn <strong>Run</strong>.</li>
-           </ol>
-        </div>
       </div>
     </div>
   );
@@ -120,6 +134,8 @@ NOTIFY pgrst, 'reload config';
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('STAFF');
+  // Mock current user object for local state (in real app, fetched from auth)
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   const [isLoading, setIsLoading] = useState(false);
   
@@ -153,6 +169,8 @@ const App: React.FC = () => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+
   // Initial Data Fetching
   useEffect(() => {
     if (isAuthenticated) {
@@ -169,7 +187,8 @@ const App: React.FC = () => {
         dataService.getCustomers(),
         dataService.getSuppliers(),
         dataService.getInventoryLogs(),
-        userRole === 'ADMIN' ? dataService.getUsers() : Promise.resolve([])
+        // Always fetch users to find current user info, but filter in UI if not admin
+        dataService.getUsers()
       ]);
       setOrders(fetchedOrders);
       setProducts(fetchedProducts);
@@ -177,6 +196,16 @@ const App: React.FC = () => {
       setSuppliers(fetchedSuppliers);
       setLogs(fetchedLogs);
       setUsers(fetchedUsers);
+
+      // If we are logged in with email, try to find our full user object to get permissions
+      if (currentUser?.email) {
+          const foundUser = fetchedUsers.find(u => u.email === currentUser.email);
+          if (foundUser) {
+              setCurrentUser(foundUser);
+              setUserRole(foundUser.role);
+          }
+      }
+
     } catch (error) {
       console.error("Failed to load data", error);
     } finally {
@@ -186,6 +215,16 @@ const App: React.FC = () => {
 
   const handleLoginSuccess = (role: UserRole) => {
     setUserRole(role);
+    // In a real app, we'd get the full user object from the auth response
+    // Here we create a mock wrapper. The 'loadData' will refine it with DB data
+    const mockUser: User = {
+        id: 'current-user-id',
+        email: role === 'ADMIN' ? 'admin' : 'demo',
+        name: role === 'ADMIN' ? 'Administrator' : 'Nhân viên bán hàng',
+        role: role,
+        permissions: role === 'ADMIN' ? [] : ['VIEW_DASHBOARD', 'VIEW_ORDERS', 'VIEW_PRODUCTS'] // Default permissions before DB load
+    };
+    setCurrentUser(mockUser);
     setIsAuthenticated(true);
   };
 
@@ -204,13 +243,16 @@ const App: React.FC = () => {
         message = error.message || error.details || error.hint || JSON.stringify(error);
     }
 
+    // Friendly message for Schema Cache error (PGRST204)
+    if (message.includes('schema cache') || message.includes('Could not find') || message.includes('new_stock')) {
+        message = `Cấu trúc bảng dữ liệu trên Server chưa được cập nhật (thiếu cột 'new_stock', 'old_stock'...). \n\nVui lòng vào mục "Cài đặt hệ thống", copy lệnh SQL và chạy trong Supabase SQL Editor để sửa lỗi này.`;
+    }
     // Clean up generic object dump
-    if (message === '{}' || message.includes('[object Object]')) {
+    else if (message === '{}' || message.includes('[object Object]')) {
         message = "Hệ thống gặp lỗi kết nối hoặc bảng dữ liệu chưa được khởi tạo.";
     }
-
     // Friendly message for missing table
-    if (message.includes('relation') && message.includes('does not exist')) {
+    else if (message.includes('relation') && message.includes('does not exist')) {
         message = `Bảng dữ liệu cho "${context}" chưa được khởi tạo trong Database.\nVui lòng vào "Cài đặt hệ thống" và chạy lệnh SQL sửa lỗi.`;
     }
 
@@ -271,8 +313,8 @@ const App: React.FC = () => {
   };
   
   const handleDeleteProduct = async (id: string) => {
-    if (userRole !== 'ADMIN') {
-      alert("Chỉ Admin mới có quyền xóa sản phẩm!");
+    if (userRole !== 'ADMIN' && !currentUser?.permissions?.includes('MANAGE_PRODUCTS')) {
+      alert("Bạn không có quyền xóa sản phẩm!");
       return;
     }
     if (!window.confirm('Xóa sản phẩm này?')) return;
@@ -285,7 +327,7 @@ const App: React.FC = () => {
   };
 
   const handleInventoryUpdate = async (
-    items: { product: Product, quantity: number, price: number }[],
+    items: { product: Product, quantity: number, price: number, newSellingPrice?: number }[],
     type: InventoryType,
     supplier: string,
     doc: string,
@@ -312,9 +354,17 @@ const App: React.FC = () => {
           const newVal = item.quantity * item.price;
           if (newStock > 0) newImportPrice = (currentVal + newVal) / newStock;
        }
+       
+       // Update selling price if provided in import
+       const newSellingPrice = (type === 'IMPORT' && item.newSellingPrice) ? item.newSellingPrice : product.price;
 
        // Update Product Object
-       updatedProducts[productIndex] = { ...product, stock: newStock, importPrice: Math.round(newImportPrice) };
+       updatedProducts[productIndex] = { 
+           ...product, 
+           stock: newStock, 
+           importPrice: Math.round(newImportPrice),
+           price: newSellingPrice
+       };
 
        // Create Log
        newLogs.push({
@@ -325,7 +375,7 @@ const App: React.FC = () => {
          quantity: item.quantity,
          oldStock: product.stock,
          newStock,
-         price: item.price,
+         price: item.price, // This is import/export price
          supplier,
          referenceDoc: doc,
          note,
@@ -341,7 +391,17 @@ const App: React.FC = () => {
     try {
       // Execute sequentially to ensure order
       for (const item of items) {
-        await dataService.updateProductStock(item.product, type, item.quantity, item.price, supplier, doc, note, date);
+        await dataService.updateProductStock(
+            item.product, 
+            type, 
+            item.quantity, 
+            item.price, 
+            supplier, 
+            doc, 
+            note, 
+            date,
+            item.newSellingPrice // Pass new selling price
+        );
       }
     } catch (error: any) {
       handleSaveError(error, 'Cập nhật kho');
@@ -517,6 +577,8 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)}
         onLogout={() => setIsAuthenticated(false)}
         userRole={userRole}
+        user={currentUser}
+        onChangePassword={() => setIsChangePasswordModalOpen(true)}
       />
       
       <main className="flex-1 lg:ml-0 flex flex-col min-w-0 transition-all duration-300">
@@ -541,11 +603,11 @@ const App: React.FC = () => {
              <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
              <div className="flex items-center gap-3 pl-2 sm:pl-0">
                <div className="hidden md:flex flex-col items-end">
-                 <span className="text-sm font-semibold text-slate-800">{userRole === 'ADMIN' ? 'Admin' : 'Staff'}</span>
+                 <span className="text-sm font-semibold text-slate-800">{userRole === 'ADMIN' ? 'Admin' : currentUser?.name || 'Staff'}</span>
                  <span className="text-xs text-slate-500">{userRole === 'ADMIN' ? 'Quản lý cấp cao' : 'Nhân viên bán hàng'}</span>
                </div>
                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-md ring-2 ring-white">
-                 {userRole === 'ADMIN' ? 'AD' : 'ST'}
+                 {userRole === 'ADMIN' ? 'AD' : (currentUser?.name?.charAt(0) || 'ST')}
                </div>
              </div>
            </div>
@@ -564,6 +626,7 @@ const App: React.FC = () => {
         initialData={editingOrder}
         products={products}
         customers={customers}
+        onQuickAddCustomer={() => { setEditingCustomer(null); setIsCustomerModalOpen(true); }}
       />
       <ProductModal
         isOpen={isProductModalOpen}
@@ -592,12 +655,19 @@ const App: React.FC = () => {
         products={products}
         customers={customers}
         suppliers={suppliers}
+        onQuickAddCustomer={() => { setEditingCustomer(null); setIsCustomerModalOpen(true); }}
+        onQuickAddSupplier={() => { setEditingSupplier(null); setIsSupplierModalOpen(true); }}
       />
       <UserModal
         isOpen={isUserModalOpen}
         onClose={() => setIsUserModalOpen(false)}
         onSave={handleSaveUser}
         initialData={editingUser}
+      />
+      <ChangePasswordModal
+        isOpen={isChangePasswordModalOpen}
+        onClose={() => setIsChangePasswordModalOpen(false)}
+        userId={currentUser?.id || ''}
       />
     </div>
   );

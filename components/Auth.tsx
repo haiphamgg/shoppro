@@ -74,7 +74,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-md shadow-inner">
               <ShieldCheck size={32} className="text-white" />
             </div>
-            <h1 className="text-2xl font-bold mb-2">SalesPro System</h1>
+            <h1 className="text-2xl font-bold mb-2">Shop Khuyên Tai Buôn Hồ</h1>
             <p className="text-blue-100 text-sm">Quản lý bán hàng chuyên nghiệp</p>
           </div>
         </div>

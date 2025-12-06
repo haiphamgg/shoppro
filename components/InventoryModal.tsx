@@ -1,22 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle, AlertTriangle, Camera, Calendar, List, Info } from 'lucide-react';
+import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle, AlertTriangle, Camera, Calendar, List, Info, TrendingUp, UserPlus } from 'lucide-react';
 import { Product, InventoryType, Customer, Supplier } from '../types';
 import { QRScanner } from './QRScanner';
 
 interface InventoryItem {
   product: Product;
   quantity: number;
-  price: number;
+  price: number; // Giá nhập (nếu là Import) hoặc Giá xuất (nếu là Export)
+  newSellingPrice?: number; // Giá bán mới (chỉ dùng cho Import)
 }
 
 interface InventoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (items: { product: Product, quantity: number, price: number }[], type: InventoryType, supplier: string, doc: string, note: string, date: string) => void;
+  onConfirm: (items: { product: Product, quantity: number, price: number, newSellingPrice?: number }[], type: InventoryType, supplier: string, doc: string, note: string, date: string) => void;
   initialProduct: Product | null;
   products: Product[];
   customers: Customer[];
   suppliers: Supplier[];
+  onQuickAddCustomer: () => void;
+  onQuickAddSupplier: () => void;
 }
 
 const formatNumber = (num: number) => {
@@ -32,7 +35,7 @@ const formatCurrency = (amount: number) => {
 };
 
 
-export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose, onConfirm, initialProduct, products, customers, suppliers }) => {
+export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose, onConfirm, initialProduct, products, customers, suppliers, onQuickAddCustomer, onQuickAddSupplier }) => {
   const [type, setType] = useState<InventoryType>('IMPORT');
   const [cart, setCart] = useState<InventoryItem[]>([]);
   const [supplier, setSupplier] = useState('');
@@ -59,32 +62,34 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
       setActiveTab('INFO'); // Reset tab on open
       
       if (initialProduct) {
-        addToCart(initialProduct, type === 'IMPORT' ? (initialProduct.importPrice || 0) : initialProduct.price);
-        // On mobile, if adding initial product, maybe stay on info to fill details, or switch to cart?
-        // Let's stay on INFO so they can fill supplier/date first.
+        addToCart(initialProduct);
       }
     }
   }, [isOpen, initialProduct]);
 
-  const addToCart = (product: Product, defaultPrice: number) => {
+  const addToCart = (product: Product) => {
+    const defaultPrice = type === 'IMPORT' ? (product.importPrice || 0) : product.price;
+    
     setCart(prev => {
       const exists = prev.find(item => item.product.id === product.id);
       if (exists) {
           return prev.map(item => item.product.id === product.id ? {...item, quantity: item.quantity + 1} : item);
       }
-      return [...prev, { product, quantity: 1, price: defaultPrice }];
+      return [...prev, { 
+          product, 
+          quantity: 1, 
+          price: defaultPrice,
+          newSellingPrice: product.price // Mặc định giá bán mới bằng giá bán hiện tại
+      }];
     });
     setSearchTerm('');
     setShowProductSearch(false);
-    
-    // Optional: Auto switch to cart on mobile if user explicitly adds an item via search?
-    // For now, let's keep them on search to add more items easily.
   };
 
   const handleScan = (code: string) => {
       const product = products.find(p => p.code === code);
       if (product) {
-          addToCart(product, type === 'IMPORT' ? (product.importPrice || 0) : product.price);
+          addToCart(product);
           setShowScanner(false);
       } else {
           alert(`Không tìm thấy sản phẩm với mã: ${code}`);
@@ -92,7 +97,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
       }
   };
 
-  const updateCartItem = (index: number, field: 'quantity' | 'price', value: number) => {
+  const updateCartItem = (index: number, field: 'quantity' | 'price' | 'newSellingPrice', value: number) => {
     const newCart = [...cart];
     newCart[index] = { ...newCart[index], [field]: value };
     setCart(newCart);
@@ -125,6 +130,16 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
     onConfirm(cart, type, supplier, referenceDoc, note, date);
     onClose();
   };
+
+  // Reset prices in cart when switching types
+  useEffect(() => {
+     if (cart.length > 0) {
+         setCart(prev => prev.map(item => ({
+             ...item,
+             price: type === 'IMPORT' ? (item.product.importPrice || 0) : item.product.price
+         })));
+     }
+  }, [type]);
 
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -200,7 +215,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                     </button>
                 </div>
 
-                {/* Product Search - Prominent Position */}
+                {/* Product Search */}
                 <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
                     <div className="flex justify-between items-center mb-2">
                         <label className="block text-sm font-bold text-blue-800">Thêm sản phẩm</label>
@@ -222,7 +237,6 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                             onChange={(e) => { setSearchTerm(e.target.value); setShowProductSearch(true); }}
                             onFocus={() => setShowProductSearch(true)}
                         />
-                        {/* Improved Search Results Dropdown for Mobile */}
                         {showProductSearch && searchTerm && (
                             <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-60 overflow-y-auto z-30 animate-fade-in custom-scrollbar">
                                 {filteredProducts.length > 0 ? (
@@ -230,7 +244,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                         <div 
                                             key={p.id} 
                                             className="p-3 hover:bg-blue-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
-                                            onClick={() => addToCart(p, type === 'IMPORT' ? (p.importPrice || 0) : p.price)}
+                                            onClick={() => addToCart(p)}
                                         >
                                             <div className="flex items-center gap-3 overflow-hidden">
                                                 <div className="w-10 h-10 bg-slate-100 rounded-lg flex-shrink-0 flex items-center justify-center">
@@ -294,21 +308,31 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
                             {type === 'IMPORT' ? 'Nhà cung cấp' : 'Khách hàng / Người nhận'}
                         </label>
-                        <div className="relative">
-                            {type === 'IMPORT' ? <Truck className="absolute left-3 top-2.5 text-slate-400" size={16} /> : <User className="absolute left-3 top-2.5 text-slate-400" size={16} />}
-                            <input 
-                                list={type === 'IMPORT' ? 'suppliers-list-inv' : 'customers-list-inv'}
-                                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-slate-50 focus:bg-white"
-                                value={supplier}
-                                onChange={(e) => setSupplier(e.target.value)}
-                                placeholder="Tìm đối tác..."
-                            />
-                            <datalist id="suppliers-list-inv">
-                                {suppliers.map(s => <option key={s.id} value={s.name}>{s.phone}</option>)}
-                            </datalist>
-                            <datalist id="customers-list-inv">
-                                {customers.map(c => <option key={c.id} value={c.name}>{c.phone}</option>)}
-                            </datalist>
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                {type === 'IMPORT' ? <Truck className="absolute left-3 top-2.5 text-slate-400" size={16} /> : <User className="absolute left-3 top-2.5 text-slate-400" size={16} />}
+                                <input 
+                                    list={type === 'IMPORT' ? 'suppliers-list-inv' : 'customers-list-inv'}
+                                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-slate-50 focus:bg-white"
+                                    value={supplier}
+                                    onChange={(e) => setSupplier(e.target.value)}
+                                    placeholder="Tìm đối tác..."
+                                />
+                                <datalist id="suppliers-list-inv">
+                                    {suppliers.map(s => <option key={s.id} value={s.name}>{s.phone}</option>)}
+                                </datalist>
+                                <datalist id="customers-list-inv">
+                                    {customers.map(c => <option key={c.id} value={c.name}>{c.phone}</option>)}
+                                </datalist>
+                            </div>
+                             <button
+                                type="button"
+                                onClick={type === 'IMPORT' ? onQuickAddSupplier : onQuickAddCustomer}
+                                className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center"
+                                title="Thêm nhanh đối tác"
+                            >
+                                <UserPlus size={20} />
+                            </button>
                         </div>
                     </div>
 
@@ -381,8 +405,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                      </div>
 
                                      {/* Controls */}
-                                     <div className="flex items-end justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 mt-2 sm:mt-0 sm:ml-auto">
-                                         <div className="w-24">
+                                     <div className="flex items-end justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 mt-2 sm:mt-0 sm:ml-auto w-full sm:w-auto">
+                                         <div className="w-20">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">Số lượng</label>
                                             <div className="flex items-center border border-slate-200 rounded-lg bg-white">
                                                 <input 
@@ -393,8 +417,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                                 />
                                             </div>
                                          </div>
-                                         <div className="w-32">
-                                            <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">{type === 'IMPORT' ? 'Giá nhập' : 'Giá xuất'}</label>
+                                         <div className="w-28">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">{type === 'IMPORT' ? 'Giá vốn' : 'Giá xuất'}</label>
                                             <input 
                                                 type="text" 
                                                 className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm text-right outline-none focus:border-blue-400 font-medium"
@@ -402,11 +426,22 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                                 onChange={(e) => updateCartItem(index, 'price', parseNumber(e.target.value))}
                                                 placeholder="0"
                                             />
-                                            <div className="text-[10px] text-blue-600 font-medium text-right mt-0.5 truncate">
-                                                {formatCurrency(item.price * item.quantity)}
-                                            </div>
                                          </div>
-                                         <button onClick={() => removeCartItem(index)} className="hidden sm:flex p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors h-[38px] w-[38px] items-center justify-center mb-4">
+
+                                         {type === 'IMPORT' && (
+                                            <div className="w-28">
+                                                <label className="text-[10px] text-blue-500 font-bold uppercase mb-1 block flex items-center gap-1"><TrendingUp size={10} /> Giá bán mới</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full px-2 py-1.5 border border-blue-200 rounded-lg text-sm text-right outline-none focus:border-blue-400 font-bold text-blue-600"
+                                                    value={formatNumber(item.newSellingPrice || 0)}
+                                                    onChange={(e) => updateCartItem(index, 'newSellingPrice', parseNumber(e.target.value))}
+                                                    placeholder="0"
+                                                />
+                                            </div>
+                                         )}
+
+                                         <button onClick={() => removeCartItem(index)} className="hidden sm:flex p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors h-[38px] w-[38px] items-center justify-center mb-4 sm:mb-0">
                                              <Trash2 size={18} />
                                          </button>
                                      </div>

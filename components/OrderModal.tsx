@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, User, Save, XCircle, CheckCircle, Camera, ShoppingBag, DollarSign } from 'lucide-react';
+import { X, Plus, Trash2, User, Save, XCircle, CheckCircle, Camera, ShoppingBag, DollarSign, UserPlus } from 'lucide-react';
 import { Order, OrderStatus, Product, OrderItem, Customer } from '../types';
 import { QRScanner } from './QRScanner';
 
@@ -10,9 +10,10 @@ interface OrderModalProps {
   initialData?: Order | null;
   products: Product[];
   customers: Customer[];
+  onQuickAddCustomer: () => void;
 }
 
-export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, initialData, products, customers }) => {
+export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, initialData, products, customers, onQuickAddCustomer }) => {
   const [customerName, setCustomerName] = useState('');
   const [status, setStatus] = useState<OrderStatus>(OrderStatus.PENDING);
   const [items, setItems] = useState<OrderItem[]>([]);
@@ -132,22 +133,32 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Khách hàng</label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input
-                  type="text"
-                  list="customer-list-order"
-                  required
-                  className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
-                  value={customerName}
-                  onChange={handleCustomerSelect}
-                  placeholder="Tìm hoặc nhập tên khách hàng"
-                />
-                <datalist id="customer-list-order">
-                  {customers.map(c => (
-                    <option key={c.id} value={c.name}>{c.phone}</option>
-                  ))}
-                </datalist>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                    type="text"
+                    list="customer-list-order"
+                    required
+                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
+                    value={customerName}
+                    onChange={handleCustomerSelect}
+                    placeholder="Tìm hoặc nhập tên khách hàng"
+                    />
+                    <datalist id="customer-list-order">
+                    {customers.map(c => (
+                        <option key={c.id} value={c.name}>{c.phone}</option>
+                    ))}
+                    </datalist>
+                </div>
+                <button
+                    type="button"
+                    onClick={onQuickAddCustomer}
+                    className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center"
+                    title="Thêm nhanh khách hàng"
+                >
+                    <UserPlus size={20} />
+                </button>
               </div>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">

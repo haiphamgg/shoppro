@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Order, Product, OrderStatus, Customer, InventoryLog, InventoryType, Supplier, User } from '../types';
+import { Order, Product, OrderStatus, Customer, InventoryLog, InventoryType, Supplier, User, Permission } from '../types';
 import { MOCK_ORDERS, MOCK_PRODUCTS, MOCK_LOGS, MOCK_SUPPLIERS, MOCK_USERS } from '../constants';
 
 // --- UTILS ---
@@ -129,7 +129,8 @@ const mapRowToUser = (row: any): User => ({
   name: row.name,
   role: row.role,
   phone: row.phone || '',
-  createdAt: row.created_at
+  createdAt: row.created_at,
+  permissions: row.permissions ? (typeof row.permissions === 'string' ? JSON.parse(row.permissions) : row.permissions) : []
 });
 
 // --- SERVICE ---
@@ -296,7 +297,8 @@ export const dataService = {
     supplier: string, 
     referenceDoc: string, 
     note: string,
-    date: string // New parameter for transaction date
+    date: string, // New parameter for transaction date
+    newSellingPrice?: number // New parameter for updating selling price
   ): Promise<void> {
     const newStock = type === 'IMPORT' ? product.stock + quantity : product.stock - quantity;
     let newImportPrice = product.importPrice;
@@ -313,12 +315,20 @@ export const dataService = {
 
     if (!isSupabaseConfigured) return;
 
-    // Update Product Stock
-    const { error: prodError } = await supabase.from('products')
-      .update({ 
+    // Prepare update object
+    const updatePayload: any = { 
         stock: newStock,
         import_price: Math.round(newImportPrice)
-      })
+    };
+
+    // If newSellingPrice is provided and it's an IMPORT, update the price
+    if (type === 'IMPORT' && newSellingPrice !== undefined) {
+        updatePayload.price = newSellingPrice;
+    }
+
+    // Update Product Stock & Price
+    const { error: prodError } = await supabase.from('products')
+      .update(updatePayload)
       .eq('id', product.id);
       
     if (prodError) {
@@ -331,6 +341,7 @@ export const dataService = {
 
     // Insert Log with user-selected DATE
     const { error: logError } = await supabase.from('inventory_logs').insert([{
+      id: generateUUID(), // Generate client-side ID to avoid "null value in column id" error
       product_id: product.id,
       type,
       quantity,
@@ -343,7 +354,10 @@ export const dataService = {
       date: date || new Date().toISOString() // Save the transaction date
     }]);
     
-    if (logError) console.error("Error logging inventory", logError);
+    if (logError) {
+        console.error("Error logging inventory:", JSON.stringify(logError));
+        throw new Error(`Ghi nhận lịch sử thất bại: ${logError.message}`);
+    }
   },
 
   async deleteProduct(id: string): Promise<void> {
@@ -356,14 +370,57 @@ export const dataService = {
   async getInventoryLogs(): Promise<InventoryLog[]> {
     if (!isSupabaseConfigured) return MOCK_LOGS;
     try {
-      const { data, error } = await supabase
+      // 1. Fetch raw logs (NO JOIN) to avoid foreign key errors
+      const { data: logsData, error: logsError } = await supabase
         .from('inventory_logs')
-        .select(`*, products(name)`)
-        .order('date', { ascending: false }); // Sort by transaction date instead of created_at
+        .select('*')
+        .order('date', { ascending: false });
       
-      if (error) return MOCK_LOGS;
-      return data.map(mapRowToLog);
-    } catch { return MOCK_LOGS; }
+      if (logsError) {
+          console.error("Error fetching logs:", logsError);
+          // If error is permissions, maybe try simple select? 
+          // But usually we just return mock logs if failed.
+          return MOCK_LOGS; 
+      }
+      
+      if (!logsData || logsData.length === 0) return [];
+
+      // 2. Manually fetch product names
+      // Extract unique product IDs
+      const productIds = Array.from(new Set(logsData.map(l => l.product_id).filter(id => id)));
+      
+      let nameMap: Record<string, string> = {};
+      if (productIds.length > 0) {
+          const { data: productsData } = await supabase
+            .from('products')
+            .select('id, name')
+            .in('id', productIds);
+            
+          if (productsData) {
+              productsData.forEach(p => { nameMap[p.id] = p.name; });
+          }
+      }
+
+      // 3. Map manually
+      return logsData.map(row => ({
+        id: String(row.id),
+        productId: String(row.product_id),
+        productName: nameMap[row.product_id] || 'Sản phẩm đã xóa/ẩn',
+        type: row.type as InventoryType,
+        quantity: row.quantity,
+        oldStock: row.old_stock,
+        newStock: row.new_stock,
+        price: Number(row.price) || 0,
+        supplier: row.supplier,
+        referenceDoc: row.reference_doc,
+        note: row.note,
+        date: row.date || row.created_at,
+        timestamp: row.created_at
+      }));
+    } catch (err) { 
+        console.error("Exception fetching logs:", err);
+        return MOCK_LOGS; 
+    }
   },
 
   // --- CUSTOMERS ---
@@ -447,13 +504,13 @@ export const dataService = {
 
   async createUser(user: User): Promise<User> {
     if (!isSupabaseConfigured) return user;
-    // In a real app, you would create user in Supabase Auth via Admin API or invite
-    // Here we simulate by adding to app_users table
     const row = {
       name: user.name,
       email: user.email,
       role: user.role,
-      phone: user.phone
+      phone: user.phone,
+      password: user.password, // Saving password directly for this demo scope
+      permissions: JSON.stringify(user.permissions || [])
     };
     const { data, error } = await supabase.from('app_users').insert([row]).select().single();
     if (error) throw error;
@@ -462,12 +519,19 @@ export const dataService = {
 
   async updateUser(user: User): Promise<User> {
     if (!isSupabaseConfigured) return user;
-    const row = {
+    const row: any = {
       name: user.name,
       email: user.email,
       role: user.role,
-      phone: user.phone
+      phone: user.phone,
+      permissions: JSON.stringify(user.permissions || [])
     };
+    
+    // Only update password if provided (for reset)
+    if (user.password) {
+        row.password = user.password;
+    }
+
     const { data, error } = await supabase.from('app_users').update(row).eq('id', user.id).select().single();
     if (error) throw error;
     return mapRowToUser(data);
@@ -477,5 +541,12 @@ export const dataService = {
     if (!isSupabaseConfigured) return;
     const { error } = await supabase.from('app_users').delete().eq('id', id);
     if (error) throw error;
+  },
+  
+  // Specific method for self-service password change
+  async changePassword(userId: string, newPassword: string): Promise<void> {
+     if (!isSupabaseConfigured) return;
+     const { error } = await supabase.from('app_users').update({ password: newPassword }).eq('id', userId);
+     if (error) throw error;
   }
 };
