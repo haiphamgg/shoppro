@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, User, Save, XCircle, CheckCircle, Camera, ShoppingBag, DollarSign, UserPlus } from 'lucide-react';
-import { Order, OrderStatus, Product, OrderItem, Customer } from '../types';
+import { X, Plus, Trash2, User, Save, XCircle, CheckCircle, Camera, ShoppingBag, DollarSign, UserPlus, TicketPercent, Calculator } from 'lucide-react';
+import { Order, OrderStatus, Product, OrderItem, Customer, Promotion } from '../types';
+import { dataService } from '../services/dataService';
 import { QRScanner } from './QRScanner';
 
 interface OrderModalProps {
@@ -19,16 +21,34 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
   const [items, setItems] = useState<OrderItem[]>([]);
   const [showScanner, setShowScanner] = useState(false);
   
+  // Promotion State
+  const [availablePromotions, setAvailablePromotions] = useState<Promotion[]>([]);
+  const [selectedPromotionId, setSelectedPromotionId] = useState<string>('');
+
   useEffect(() => {
+    // Load promotions when modal opens
+    if (isOpen) {
+        dataService.getPromotions().then(promos => {
+            // Filter active and valid date
+            const now = new Date();
+            // Simple check: Start date <= now <= End date
+            // Note: In production, consider timezone carefuly.
+            const valid = promos.filter(p => p.isActive); 
+            setAvailablePromotions(valid);
+        });
+    }
+
     if (isOpen) {
       if (initialData) {
         setCustomerName(initialData.customerName);
         setStatus(initialData.status);
         setItems(initialData.items);
+        setSelectedPromotionId(initialData.promotionId || '');
       } else {
         setCustomerName('');
         setStatus(OrderStatus.PENDING);
         setItems([]);
+        setSelectedPromotionId('');
       }
     }
     setShowScanner(false);
@@ -86,6 +106,33 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
     return items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
 
+  // Calculate discount based on promotion
+  const calculateDiscount = () => {
+      if (!selectedPromotionId) return 0;
+      const promo = availablePromotions.find(p => p.id === selectedPromotionId);
+      if (!promo) return 0;
+      
+      const total = calculateTotal();
+      
+      // Check Order Value Condition
+      if (promo.minOrderValue && total < promo.minOrderValue) return 0;
+      
+      // Check Customer Spending Condition
+      const existingCustomer = customers.find(c => c.name === customerName);
+      const spending = existingCustomer ? (existingCustomer.totalSpending || 0) : 0;
+      if (promo.minCustomerSpending && spending < promo.minCustomerSpending) return 0;
+
+      // Calculate
+      if (promo.type === 'DISCOUNT_AMOUNT') return promo.value;
+      if (promo.type === 'DISCOUNT_PERCENT') return Math.round(total * (promo.value / 100));
+      
+      return 0;
+  };
+
+  const totalAmount = calculateTotal();
+  const discount = calculateDiscount();
+  const finalAmount = Math.max(0, totalAmount - discount);
+
   const handleCustomerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setCustomerName(val);
@@ -100,7 +147,10 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
       customerId: existingCustomer ? existingCustomer.id : (initialData ? initialData.customerId : `GUEST-${Date.now()}`),
       customerName,
       items,
-      totalAmount: calculateTotal(),
+      totalAmount,
+      discountAmount: discount,
+      finalAmount,
+      promotionId: selectedPromotionId || undefined,
       status,
       date: initialData ? initialData.date : new Date().toISOString(),
     };
@@ -147,7 +197,7 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
                     />
                     <datalist id="customer-list-order">
                     {customers.map(c => (
-                        <option key={c.id} value={c.name}>{c.phone}</option>
+                        <option key={c.id} value={c.name}>{c.phone} - {c.rank || 'Member'}</option>
                     ))}
                     </datalist>
                 </div>
@@ -252,11 +302,58 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
           </div>
 
           {items.length > 0 && (
-             <div className="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
-                <span className="text-lg font-bold text-slate-700">Tổng thanh toán</span>
-                <span className="text-2xl font-bold text-blue-600 flex items-center gap-1">
-                    {calculateTotal().toLocaleString()} <span className="text-sm text-slate-500 font-normal">VNĐ</span>
-                </span>
+             <div className="bg-gradient-to-br from-white to-blue-50 p-5 rounded-xl border border-blue-100 shadow-sm space-y-4">
+                
+                {/* Promotion Selector */}
+                <div className="pb-4 border-b border-blue-100">
+                    <label className="text-sm font-bold text-slate-800 flex items-center gap-1.5 mb-2">
+                        <TicketPercent size={18} className="text-blue-600"/> 
+                        Chọn mã khuyến mãi
+                    </label>
+                    <select 
+                        className="w-full p-3 border border-blue-200 rounded-xl text-sm outline-none bg-white shadow-sm font-medium focus:ring-2 focus:ring-blue-500/20"
+                        value={selectedPromotionId}
+                        onChange={(e) => setSelectedPromotionId(e.target.value)}
+                    >
+                        <option value="">-- Không sử dụng khuyến mãi --</option>
+                        {availablePromotions.map(p => (
+                            <option key={p.id} value={p.id}>
+                                {p.code} - {p.name} ({p.type === 'DISCOUNT_PERCENT' ? `-${p.value}%` : `-${p.value.toLocaleString()}đ`})
+                            </option>
+                        ))}
+                    </select>
+                    {selectedPromotionId && discount === 0 && (
+                        <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
+                            <XCircle size={12} /> Đơn hàng chưa đủ điều kiện để áp dụng mã này (giá trị tối thiểu hoặc hạng thành viên).
+                        </p>
+                    )}
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="text-slate-500">Tổng tiền hàng</span>
+                        <span className="font-bold text-slate-800 text-lg">{totalAmount.toLocaleString()} đ</span>
+                    </div>
+                    
+                    {discount > 0 ? (
+                        <div className="flex justify-between items-center text-sm bg-green-50 p-2 rounded-lg border border-green-100">
+                            <span className="text-green-700 font-bold flex items-center gap-1"><TicketPercent size={14}/> Giảm giá</span>
+                            <span className="font-bold text-green-700">- {discount.toLocaleString()} đ</span>
+                        </div>
+                    ) : (
+                        <div className="flex justify-between items-center text-sm opacity-50">
+                            <span className="text-slate-500">Giảm giá</span>
+                            <span className="font-medium text-slate-700">0 đ</span>
+                        </div>
+                    )}
+
+                    <div className="flex justify-between items-center pt-3 border-t border-blue-200 mt-2">
+                        <span className="text-lg font-bold text-slate-800">Khách phải trả</span>
+                        <span className="text-3xl font-bold text-blue-700 flex items-center gap-1">
+                            {finalAmount.toLocaleString()} <span className="text-sm text-slate-500 font-normal mt-2">VNĐ</span>
+                        </span>
+                    </div>
+                </div>
             </div>
           )}
         </form>

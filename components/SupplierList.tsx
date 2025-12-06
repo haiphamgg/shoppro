@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Plus, Search, Edit, Trash, Truck, Phone, Mail, MapPin } from 'lucide-react';
+import { Plus, Search, Edit, Trash, Truck, Phone, Mail, MapPin, AlertCircle, History } from 'lucide-react';
 import { Supplier } from '../types';
 
 interface SupplierListProps {
@@ -7,9 +8,14 @@ interface SupplierListProps {
   onAddSupplier: () => void;
   onEditSupplier: (supplier: Supplier) => void;
   onDeleteSupplier: (id: string) => void;
+  onViewHistory: (supplier: Supplier) => void; // New Prop
 }
 
-export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, onAddSupplier, onEditSupplier, onDeleteSupplier }) => {
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+};
+
+export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, onAddSupplier, onEditSupplier, onDeleteSupplier, onViewHistory }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredSuppliers = suppliers.filter(s =>
@@ -50,6 +56,7 @@ export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, onAddSupp
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Tên Nhà cung cấp</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Liên hệ</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Công nợ</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Địa chỉ</th>
                 <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase">Thao tác</th>
               </tr>
@@ -65,7 +72,7 @@ export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, onAddSupp
                         </div>
                         <div>
                           <div className="font-medium text-slate-900">{supplier.name}</div>
-                          <div className="text-xs text-slate-400">{supplier.id}</div>
+                          <div className="text-xs text-slate-400">{supplier.code || supplier.id}</div>
                         </div>
                       </div>
                     </td>
@@ -79,20 +86,39 @@ export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, onAddSupp
                         </div>
                       </div>
                     </td>
+                    <td className="px-6 py-4">
+                      <div className={`text-sm font-bold ${supplier.debt > 0 ? 'text-red-600' : 'text-slate-600'}`}>
+                         {formatCurrency(supplier.debt || 0)}
+                      </div>
+                      {supplier.debt > 0 && (
+                          <div className="text-[10px] text-red-500 flex items-center gap-1 mt-0.5">
+                              <AlertCircle size={10} /> Cần thanh toán
+                          </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-slate-600 max-w-xs truncate" title={supplier.address}>
                       {supplier.address}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
                         <button 
+                          onClick={() => onViewHistory(supplier)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title="Xem lịch sử nhập hàng"
+                        >
+                          <History size={18} />
+                        </button>
+                        <button 
                           onClick={() => onEditSupplier(supplier)}
                           className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          title="Sửa thông tin"
                         >
                           <Edit size={18} />
                         </button>
                         <button 
                           onClick={() => onDeleteSupplier(supplier.id)}
                           className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          title="Xóa nhà cung cấp"
                         >
                           <Trash size={18} />
                         </button>
@@ -101,7 +127,7 @@ export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, onAddSupp
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan={4} className="text-center py-10 text-slate-400">Không tìm thấy nhà cung cấp</td></tr>
+                <tr><td colSpan={5} className="text-center py-10 text-slate-400">Không tìm thấy nhà cung cấp</td></tr>
               )}
             </tbody>
           </table>
@@ -118,13 +144,18 @@ export const SupplierList: React.FC<SupplierListProps> = ({ suppliers, onAddSupp
                    </div>
                    <div>
                      <h3 className="font-semibold text-slate-800">{supplier.name}</h3>
-                     <p className="text-xs text-slate-400">{supplier.id}</p>
+                     <p className="text-xs text-slate-400">{supplier.code}</p>
                    </div>
                 </div>
                 <div className="flex gap-1">
+                   <button onClick={() => onViewHistory(supplier)} className="p-2 text-slate-400 hover:text-indigo-600"><History size={18} /></button>
                    <button onClick={() => onEditSupplier(supplier)} className="p-2 text-slate-400 hover:text-blue-600"><Edit size={18} /></button>
                    <button onClick={() => onDeleteSupplier(supplier.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash size={18} /></button>
                 </div>
+              </div>
+              <div className="mb-3 p-2 bg-slate-50 rounded-lg flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-500 uppercase">Công nợ</span>
+                  <span className={`font-bold ${supplier.debt > 0 ? 'text-red-600' : 'text-slate-700'}`}>{formatCurrency(supplier.debt || 0)}</span>
               </div>
               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-50 pt-3">
                 <div className="flex items-center gap-2"><Phone size={14} className="text-slate-400"/> {supplier.phone}</div>

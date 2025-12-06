@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { LayoutDashboard, ShoppingCart, Package, Users, Bot, Settings, LogOut, X, ClipboardList, Truck, Shield, KeyRound } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Users, Bot, Settings, LogOut, X, ClipboardList, Truck, Shield, KeyRound, TicketPercent, WalletCards, PieChart } from 'lucide-react';
 import { ViewState, UserRole, User, Permission } from '../types';
 
 interface SidebarProps {
@@ -7,13 +8,11 @@ interface SidebarProps {
   onChangeView: (view: ViewState) => void;
   isOpen: boolean;
   onClose: () => void;
-  onLogout: () => void;
   userRole: UserRole;
   user?: User | null;
-  onChangePassword: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen, onClose, onLogout, userRole, user, onChangePassword }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen, onClose, userRole, user }) => {
   // Helper to check permissions
   const hasPermission = (requiredPermission: Permission) => {
     if (userRole === 'ADMIN') return true;
@@ -26,14 +25,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isO
     { id: 'ORDERS', label: 'Đơn hàng', icon: ShoppingCart, permission: 'VIEW_ORDERS' as Permission },
     { id: 'PRODUCTS', label: 'Sản phẩm', icon: Package, permission: 'VIEW_PRODUCTS' as Permission },
     { id: 'INVENTORY_LOGS', label: 'Lịch sử kho', icon: ClipboardList, permission: 'VIEW_INVENTORY' as Permission },
+    { id: 'INVENTORY_REPORT', label: 'Báo cáo tồn kho', icon: PieChart, permission: 'VIEW_INVENTORY' as Permission },
     { id: 'CUSTOMERS', label: 'Khách hàng', icon: Users, permission: 'VIEW_CUSTOMERS' as Permission },
     { id: 'SUPPLIERS', label: 'Nhà cung cấp', icon: Truck, permission: 'VIEW_SUPPLIERS' as Permission },
+    { id: 'DEBT', label: 'Công nợ', icon: WalletCards, permission: 'VIEW_SUPPLIERS' as Permission },
+    { id: 'PROMOTIONS', label: 'Khuyến mãi', icon: TicketPercent, permission: 'MANAGE_PROMOTIONS' as Permission },
     { id: 'AI_ASSISTANT', label: 'Trợ lý AI', icon: Bot, permission: 'VIEW_AI_ASSISTANT' as Permission },
   ];
 
   // Only add User management for Admins
   if (userRole === 'ADMIN') {
-      menuItems.splice(6, 0, { id: 'USERS', label: 'Nhân sự', icon: Shield, permission: 'VIEW_DASHBOARD' as Permission }); // Admin always has view dashboard implies base access
+      menuItems.splice(9, 0, { id: 'USERS', label: 'Nhân sự', icon: Shield, permission: 'VIEW_DASHBOARD' as Permission });
+      // Add Settings to main menu for Admin
+      menuItems.push({ id: 'SETTINGS', label: 'Cài đặt hệ thống', icon: Settings, permission: 'VIEW_DASHBOARD' as Permission });
   }
 
   // Filter items based on user permissions
@@ -100,40 +104,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isO
             );
           })}
         </nav>
-
-        <div className="p-4 border-t border-slate-50 bg-slate-50/50">
-          {userRole === 'ADMIN' && (
-            <button 
-              onClick={() => {
-                onChangeView('SETTINGS' as ViewState);
-                if (window.innerWidth < 1024) onClose();
-              }}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 mb-2 ${
-                currentView === 'SETTINGS' 
-                  ? 'bg-blue-50 text-blue-700 shadow-sm font-medium' 
-                  : 'text-slate-600 hover:bg-white hover:shadow-sm'
-              }`}
-            >
-              <Settings size={20} className={currentView === 'SETTINGS' ? 'text-blue-600' : 'text-slate-400'} />
-              <span>Cài đặt hệ thống</span>
-            </button>
-          )}
-          
-          <button 
-            onClick={onChangePassword}
-            className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-white hover:shadow-sm transition-all duration-200 mb-2"
-          >
-            <KeyRound size={20} className="text-slate-400" />
-            <span>Đổi mật khẩu</span>
-          </button>
-
-          <button 
-            onClick={onLogout}
-            className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-all duration-200"
-          >
-            <LogOut size={20} />
-            <span>Đăng xuất</span>
-          </button>
+        
+        {/* Footer info (Version/Copyright) - Optional */}
+        <div className="p-4 text-center">
+            <p className="text-[10px] text-slate-300 font-medium">HP SalesPro v2.5 © 2025</p>
         </div>
       </div>
     </>

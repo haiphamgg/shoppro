@@ -117,9 +117,9 @@ export const MOCK_LOGS: InventoryLog[] = [
 ];
 
 export const MOCK_SUPPLIERS: Supplier[] = [
-  { id: '1', code: 'S001', name: 'Công ty Thực Phẩm Sạch', phone: '02838640800', email: 'orders@cleanfood.vn', address: 'KCN Tân Bình, HCM' },
-  { id: '2', code: 'S002', name: 'Kho Hàng Gia Dụng Tổng Hợp', phone: '0909123456', email: 'sales@giadung.com', address: 'Q12, TP.HCM' },
-  { id: '3', code: 'S003', name: 'Xưởng May Mặc Thời Trang', phone: '0987654321', email: 'fashion@workshop.vn', address: 'Hóc Môn, TP.HCM' }
+  { id: '1', code: 'S001', name: 'Công ty Thực Phẩm Sạch', phone: '02838640800', email: 'orders@cleanfood.vn', address: 'KCN Tân Bình, HCM', debt: 0 },
+  { id: '2', code: 'S002', name: 'Kho Hàng Gia Dụng Tổng Hợp', phone: '0909123456', email: 'sales@giadung.com', address: 'Q12, TP.HCM', debt: 0 },
+  { id: '3', code: 'S003', name: 'Xưởng May Mặc Thời Trang', phone: '0987654321', email: 'fashion@workshop.vn', address: 'Hóc Môn, TP.HCM', debt: 0 }
 ];
 
 export const MOCK_USERS: User[] = [

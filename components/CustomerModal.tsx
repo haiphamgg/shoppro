@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { X, User, Phone, Mail, MapPin, Save, XCircle, Hash } from 'lucide-react';
 import { Customer } from '../types';
@@ -43,6 +44,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
       email,
       phone,
       address,
+      totalSpending: initialData ? initialData.totalSpending : 0,
     };
     onSave(newCustomer);
     onClose();
@@ -51,7 +53,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
+    // Update z-index from z-50 to z-[60] to show above other modals
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col">
         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-xl">
           <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">

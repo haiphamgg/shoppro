@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle, AlertTriangle, Camera, Calendar, List, Info, TrendingUp, UserPlus } from 'lucide-react';
+import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle, AlertTriangle, Camera, Calendar, List, Info, TrendingUp, UserPlus, Wallet } from 'lucide-react';
 import { Product, InventoryType, Customer, Supplier } from '../types';
 import { QRScanner } from './QRScanner';
 
@@ -13,7 +14,7 @@ interface InventoryItem {
 interface InventoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (items: { product: Product, quantity: number, price: number, newSellingPrice?: number }[], type: InventoryType, supplier: string, doc: string, note: string, date: string) => void;
+  onConfirm: (items: { product: Product, quantity: number, price: number, newSellingPrice?: number }[], type: InventoryType, supplier: string, doc: string, note: string, date: string, paidAmount?: number) => void;
   initialProduct: Product | null;
   products: Product[];
   customers: Customer[];
@@ -42,6 +43,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
   const [referenceDoc, setReferenceDoc] = useState('');
   const [note, setNote] = useState('');
   const [date, setDate] = useState('');
+  const [paidAmount, setPaidAmount] = useState<number>(0); // New: Số tiền thanh toán
+  const [isPaidAmountTouched, setIsPaidAmountTouched] = useState(false); // Check if user manually entered payment
   
   // Mobile Tab State
   const [activeTab, setActiveTab] = useState<'INFO' | 'CART'>('INFO');
@@ -50,6 +53,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
   const [searchTerm, setSearchTerm] = useState('');
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+
+  // Auto calculate total for payment default
+  const totalValue = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
 
   useEffect(() => {
     if (isOpen) {
@@ -60,12 +66,19 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
       setDate(new Date().toISOString().split('T')[0]); // Default to today
       setShowScanner(false);
       setActiveTab('INFO'); // Reset tab on open
+      setPaidAmount(0);
+      setIsPaidAmountTouched(false);
       
       if (initialProduct) {
         addToCart(initialProduct);
       }
     }
   }, [isOpen, initialProduct]);
+
+  // Update paid amount if user hasn't touched it yet (default to full payment?) 
+  // Requirement: "nếu không nhập đủ hoặc để trống thì mặc định chuyển qua nợ"
+  // So default paidAmount should probably be 0 or empty visually, but let's initialize to 0. 
+  // If user leaves it 0, debt = total.
 
   const addToCart = (product: Product) => {
     const defaultPrice = type === 'IMPORT' ? (product.importPrice || 0) : product.price;
@@ -127,7 +140,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
       }
     }
 
-    onConfirm(cart, type, supplier, referenceDoc, note, date);
+    // Determine final paid amount. If user didn't touch it, it remains 0 (Full Debt).
+    // Or if user entered something, use that.
+    onConfirm(cart, type, supplier, referenceDoc, note, date, paidAmount);
     onClose();
   };
 
@@ -146,8 +161,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
     (p.code && p.code.toLowerCase().includes(searchTerm.toLowerCase()))
   ).filter(p => !cart.find(item => item.product.id === p.id));
 
-  const totalValue = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
   const totalQuantity = cart.reduce((s, i) => s + i.quantity, 0);
+  const debtAmount = Math.max(0, totalValue - paidAmount);
 
   if (!isOpen) return null;
 
@@ -453,6 +468,32 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
 
                 {/* Footer Summary - Sticky on Mobile */}
                 <div className="p-4 sm:p-6 border-t border-slate-200 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-30">
+                     {type === 'IMPORT' && (
+                         <div className="mb-4 bg-yellow-50 p-3 rounded-xl border border-yellow-100">
+                             <div className="flex justify-between items-center mb-2">
+                                <label className="text-xs font-bold text-slate-600 uppercase flex items-center gap-1">
+                                    <Wallet size={14} /> Thanh toán ngay (VNĐ)
+                                </label>
+                                <input 
+                                    type="text" 
+                                    className="w-32 px-2 py-1 border border-yellow-300 rounded text-right font-bold text-slate-800 outline-none focus:ring-1 focus:ring-yellow-500"
+                                    value={formatNumber(paidAmount)}
+                                    onChange={(e) => {
+                                        setPaidAmount(parseNumber(e.target.value));
+                                        setIsPaidAmountTouched(true);
+                                    }}
+                                    placeholder="0"
+                                />
+                             </div>
+                             <div className="flex justify-between items-center text-sm">
+                                 <span className="text-slate-500">Ghi nợ NCC:</span>
+                                 <span className={`font-bold ${debtAmount > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                                     {formatCurrency(debtAmount)}
+                                 </span>
+                             </div>
+                         </div>
+                     )}
+
                      <div className="flex justify-between items-center mb-4">
                          <div>
                              <p className="text-xs text-slate-500 uppercase font-bold">Tổng số lượng</p>
