@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, User, Save, XCircle, CheckCircle } from 'lucide-react';
+import { X, Plus, Trash2, User, Save, XCircle, CheckCircle, Camera } from 'lucide-react';
 import { Order, OrderStatus, Product, OrderItem, Customer } from '../types';
+import { QRScanner } from './QRScanner';
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -8,13 +9,14 @@ interface OrderModalProps {
   onSave: (order: Order) => void;
   initialData?: Order | null;
   products: Product[];
-  customers: Customer[]; // Add customers prop
+  customers: Customer[];
 }
 
 export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, initialData, products, customers }) => {
   const [customerName, setCustomerName] = useState('');
   const [status, setStatus] = useState<OrderStatus>(OrderStatus.PENDING);
   const [items, setItems] = useState<OrderItem[]>([]);
+  const [showScanner, setShowScanner] = useState(false);
   
   useEffect(() => {
     if (isOpen) {
@@ -28,15 +30,38 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
         setItems([]);
       }
     }
+    setShowScanner(false);
   }, [isOpen, initialData]);
 
-  const handleAddItem = () => {
-    if (products.length === 0) return;
-    const product = products[0];
-    setItems([
-      ...items,
-      { productId: product.id, productName: product.name, quantity: 1, price: product.price }
-    ]);
+  const handleAddItem = (product?: Product) => {
+    const prodToAdd = product || (products.length > 0 ? products[0] : null);
+    if (!prodToAdd) return;
+
+    setItems(prev => {
+        // Check if exists, just inc quantity
+        const existingIdx = prev.findIndex(i => i.productId === prodToAdd.id);
+        if (existingIdx >= 0) {
+            const newItems = [...prev];
+            newItems[existingIdx].quantity += 1;
+            return newItems;
+        }
+        return [
+            ...prev,
+            { productId: prodToAdd.id, productName: prodToAdd.name, quantity: 1, price: prodToAdd.price }
+        ];
+    });
+  };
+
+  const handleScan = (code: string) => {
+      const product = products.find(p => p.code === code);
+      if (product) {
+          handleAddItem(product);
+          // Optional: Beep sound or toast
+          setShowScanner(false);
+      } else {
+          alert(`Không tìm thấy sản phẩm với mã: ${code}`);
+          setShowScanner(false);
+      }
   };
 
   const handleUpdateItem = (index: number, field: keyof OrderItem, value: any) => {
@@ -63,12 +88,10 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
   const handleCustomerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setCustomerName(val);
-    // Auto-fill logic if needed, e.g. finding the ID
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Find customer ID if exists in list
     const existingCustomer = customers.find(c => c.name === customerName);
     
     const newOrder: Order = {
@@ -88,6 +111,10 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+      {showScanner && (
+          <QRScanner onScan={handleScan} onClose={() => setShowScanner(false)} />
+      )}
+      
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
           <h3 className="text-xl font-bold text-gray-800">
@@ -137,19 +164,28 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
           <div>
             <div className="flex justify-between items-center mb-2">
               <label className="block text-sm font-medium text-gray-700">Chi tiết đơn hàng</label>
-              <button
-                type="button"
-                onClick={handleAddItem}
-                className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-              >
-                <Plus size={16} /> Thêm sản phẩm
-              </button>
+              <div className="flex gap-2">
+                <button
+                    type="button"
+                    onClick={() => setShowScanner(true)}
+                    className="text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 transition-colors"
+                >
+                    <Camera size={16} /> Quét QR
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleAddItem()}
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 px-2 py-1.5"
+                >
+                    <Plus size={16} /> Thêm sản phẩm
+                </button>
+              </div>
             </div>
             
             <div className="space-y-3">
               {items.length === 0 ? (
                 <div className="p-8 border-2 border-dashed border-gray-200 rounded-lg text-center text-gray-400 text-sm">
-                  Chưa có sản phẩm nào. Nhấn "Thêm sản phẩm" để bắt đầu bán hàng.
+                  Chưa có sản phẩm nào. Nhấn "Thêm sản phẩm" hoặc "Quét QR".
                 </div>
               ) : (
                 items.map((item, index) => (

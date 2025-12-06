@@ -83,6 +83,56 @@ const App: React.FC = () => {
     setIsAuthenticated(true);
   };
 
+  // Helper to handle save errors gracefully
+  const handleSaveError = (error: any, context: string) => {
+    // Log detailed error to console
+    console.error(`Error saving ${context} (Raw):`, error);
+    if (typeof error === 'object') {
+        try {
+            console.error(`Error saving ${context} (JSON):`, JSON.stringify(error, null, 2));
+        } catch(e) {}
+    }
+    
+    let message = 'Lỗi không xác định';
+    
+    try {
+      if (typeof error === 'string') {
+        message = error;
+      } else if (error instanceof Error) {
+        message = error.message;
+      } else if (error && typeof error === 'object') {
+        // Handle Supabase/Postgrest Error Object
+        const msg = error.message || error.error_description || error.msg;
+        const details = error.details || error.hint;
+        const code = error.code;
+
+        // Check for specific Postgres error codes
+        if (code === '42703') { // undefined_column
+            message = `Lỗi cấu trúc dữ liệu: Cột không tồn tại trong Database.\n\nNguyên nhân: Bạn đang cố lưu các trường mới (như code, expiry_date...) nhưng bảng trong Supabase chưa có các cột này.\n\nGiải pháp: Hãy vào Supabase > SQL Editor và chạy lệnh thêm cột.`;
+        } else if (msg) {
+             message = typeof msg === 'object' ? JSON.stringify(msg) : String(msg);
+             if (details) message += `\nChi tiết: ${details}`;
+             if (code) message += ` (Code: ${code})`;
+        } else {
+             message = JSON.stringify(error, null, 2);
+        }
+      }
+    } catch (e) {
+      message = 'Lỗi nghiêm trọng khi đọc thông báo lỗi.';
+    }
+
+    // Final safety check
+    if (!message || message === '{}' || message.includes('[object Object]')) {
+         try {
+             message = JSON.stringify(error, null, 2);
+         } catch {
+             message = "Không thể đọc chi tiết lỗi. Vui lòng xem Console (F12) để biết thêm.";
+         }
+    }
+
+    alert(`⚠️ Không thể lưu ${context}:\n\n${message}`);
+  };
+
   // --- HANDLERS: ORDERS ---
   const handleSaveOrder = async (order: Order) => {
     const isEdit = !!editingOrder;
@@ -93,11 +143,15 @@ const App: React.FC = () => {
     if (currentView !== 'ORDERS') setCurrentView('ORDERS');
     
     try {
-      if (isEdit) await dataService.updateOrder(order);
-      else await dataService.createOrder(order);
+      if (isEdit) {
+        await dataService.updateOrder(order);
+      } else {
+        const newOrder = await dataService.createOrder(order);
+        setOrders(prev => prev.map(o => o.id === order.id ? newOrder : o));
+      }
     } catch (error: any) {
-      alert(`Lỗi lưu đơn hàng: ${error.message || 'Vui lòng kiểm tra lại kết nối'}`);
-      loadData(); // Revert
+      handleSaveError(error, 'Đơn hàng');
+      if (!isEdit) setOrders(prev => prev.filter(o => o.id !== order.id));
     }
   };
 
@@ -107,23 +161,28 @@ const App: React.FC = () => {
     try { 
       await dataService.deleteOrder(id); 
     } catch (error: any) {
-      alert(`Lỗi xóa đơn hàng: ${error.message}`);
-      loadData();
+      handleSaveError(error, 'Xóa đơn hàng');
     }
   };
 
   // --- HANDLERS: PRODUCTS & INVENTORY ---
   const handleSaveProduct = async (product: Product) => {
     const isEdit = !!editingProduct;
+    // Optimistic
     if (isEdit) setProducts(products.map(p => p.id === product.id ? product : p));
     else setProducts([product, ...products]);
     
     try {
-      if (isEdit) await dataService.updateProduct(product);
-      else await dataService.createProduct(product);
+      if (isEdit) {
+        await dataService.updateProduct(product);
+      } else {
+        const newProduct = await dataService.createProduct(product);
+        // Replace temp ID with real ID
+        setProducts(prev => prev.map(p => p.id === product.id ? newProduct : p));
+      }
     } catch (error: any) {
-      alert(`Lỗi lưu sản phẩm: ${error.message}`);
-      loadData();
+      handleSaveError(error, 'Sản phẩm');
+      if (!isEdit) setProducts(prev => prev.filter(p => p.id !== product.id));
     }
   };
   
@@ -137,8 +196,7 @@ const App: React.FC = () => {
     try { 
       await dataService.deleteProduct(id); 
     } catch (error: any) {
-      alert(`Lỗi xóa sản phẩm: ${error.message}`);
-      loadData();
+      handleSaveError(error, 'Xóa sản phẩm');
     }
   };
 
@@ -195,14 +253,14 @@ const App: React.FC = () => {
 
     // Async Server Update
     try {
-      // Execute sequentially to ensure order (or Promise.all for speed)
+      // Execute sequentially to ensure order
       for (const item of items) {
-        // We pass the *original* product here because dataService will calculate logic again
+        // Use updatedProducts state to ensure we have latest version if needed, 
+        // but currently we pass item.product which is fine as logic is in backend too.
         await dataService.updateProductStock(item.product, type, item.quantity, item.price, supplier, doc, note);
       }
     } catch (error: any) {
-      alert(`Lỗi cập nhật kho: ${error.message}`);
-      loadData(); // Revert on fail
+      handleSaveError(error, 'Cập nhật kho');
     }
   };
 
@@ -213,11 +271,15 @@ const App: React.FC = () => {
     else setCustomers([customer, ...customers]);
 
     try {
-      if (isEdit) await dataService.updateCustomer(customer);
-      else await dataService.createCustomer(customer);
+      if (isEdit) {
+        await dataService.updateCustomer(customer);
+      } else {
+        const newCustomer = await dataService.createCustomer(customer);
+        setCustomers(prev => prev.map(c => c.id === customer.id ? newCustomer : c));
+      }
     } catch (error: any) {
-      alert(`Lỗi lưu khách hàng: ${error.message}`);
-      loadData();
+      handleSaveError(error, 'Khách hàng');
+      if (!isEdit) setCustomers(prev => prev.filter(c => c.id !== customer.id));
     }
   };
   
@@ -227,8 +289,7 @@ const App: React.FC = () => {
     try { 
       await dataService.deleteCustomer(id); 
     } catch (error: any) {
-      alert(`Lỗi xóa khách hàng: ${error.message}`);
-      loadData();
+      handleSaveError(error, 'Xóa khách hàng');
     }
   };
 
@@ -239,11 +300,15 @@ const App: React.FC = () => {
     else setSuppliers([supplier, ...suppliers]);
 
     try {
-      if (isEdit) await dataService.updateSupplier(supplier);
-      else await dataService.createSupplier(supplier);
+      if (isEdit) {
+        await dataService.updateSupplier(supplier);
+      } else {
+        const newSupplier = await dataService.createSupplier(supplier);
+        setSuppliers(prev => prev.map(s => s.id === supplier.id ? newSupplier : s));
+      }
     } catch (error: any) {
-      alert(`Lỗi lưu nhà cung cấp: ${error.message || 'Có thể do bảng "suppliers" chưa được tạo trong Database.'}`);
-      loadData();
+      handleSaveError(error, 'Nhà cung cấp');
+      if (!isEdit) setSuppliers(prev => prev.filter(s => s.id !== supplier.id));
     }
   };
   
@@ -253,8 +318,7 @@ const App: React.FC = () => {
     try { 
       await dataService.deleteSupplier(id); 
     } catch (error: any) {
-      alert(`Lỗi xóa nhà cung cấp: ${error.message}`);
-      loadData();
+      handleSaveError(error, 'Xóa nhà cung cấp');
     }
   };
 

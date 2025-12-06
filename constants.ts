@@ -1,9 +1,10 @@
 
-import { Order, OrderStatus, Product, SalesData, InventoryLog, Supplier } from './types';
+import { Order, OrderStatus, Product, SalesData, InventoryLog, Supplier, Customer } from './types';
 
 export const MOCK_PRODUCTS: Product[] = [
   { 
-    id: 'P001', 
+    id: '1',
+    code: 'P001', 
     name: 'Cơm Tấm Sườn Bì Chả', 
     price: 45000, 
     importPrice: 25000,
@@ -13,7 +14,8 @@ export const MOCK_PRODUCTS: Product[] = [
     imageUrl: 'https://images.unsplash.com/photo-1595295333158-4742f28fbd85?auto=format&fit=crop&q=80&w=500'
   },
   { 
-    id: 'P002', 
+    id: '2',
+    code: 'P002', 
     name: 'Áo Thun Polo Classic', 
     price: 250000, 
     importPrice: 150000,
@@ -23,7 +25,8 @@ export const MOCK_PRODUCTS: Product[] = [
     imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&q=80&w=500'
   },
   { 
-    id: 'P003', 
+    id: '3',
+    code: 'P003', 
     name: 'Nước Mắm Hạnh Phúc 500ml', 
     price: 120000, 
     importPrice: 95000,
@@ -33,7 +36,8 @@ export const MOCK_PRODUCTS: Product[] = [
     imageUrl: 'https://images.unsplash.com/photo-1627485937980-221c88ac04f9?auto=format&fit=crop&q=80&w=500'
   },
   { 
-    id: 'P004', 
+    id: '4',
+    code: 'P004', 
     name: 'Balo Laptop Chống Nước', 
     price: 650000, 
     importPrice: 400000,
@@ -43,7 +47,8 @@ export const MOCK_PRODUCTS: Product[] = [
     imageUrl: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=500'
   },
   { 
-    id: 'P005', 
+    id: '5',
+    code: 'P005', 
     name: 'Trà Sữa Trân Châu Đường Đen', 
     price: 35000, 
     importPrice: 15000,
@@ -59,7 +64,7 @@ export const MOCK_ORDERS: Order[] = [
     id: 'ORD-2023-001',
     customerId: 'C001',
     customerName: 'Nguyễn Văn A',
-    items: [{ productId: 'P001', productName: 'Cơm Tấm Sườn Bì Chả', quantity: 2, price: 45000 }],
+    items: [{ productId: '1', productName: 'Cơm Tấm Sườn Bì Chả', quantity: 2, price: 45000 }],
     totalAmount: 90000,
     status: OrderStatus.DELIVERED,
     date: '2023-10-15T09:30:00Z'
@@ -68,7 +73,7 @@ export const MOCK_ORDERS: Order[] = [
     id: 'ORD-2023-002',
     customerId: 'C002',
     customerName: 'Trần Thị B',
-    items: [{ productId: 'P002', productName: 'Áo Thun Polo Classic', quantity: 1, price: 250000 }],
+    items: [{ productId: '2', productName: 'Áo Thun Polo Classic', quantity: 1, price: 250000 }],
     totalAmount: 250000,
     status: OrderStatus.SHIPPING,
     date: '2023-10-20T14:15:00Z'
@@ -78,8 +83,8 @@ export const MOCK_ORDERS: Order[] = [
     customerId: 'C003',
     customerName: 'Lê Văn C',
     items: [
-      { productId: 'P003', productName: 'Nước Mắm Hạnh Phúc 500ml', quantity: 2, price: 120000 },
-      { productId: 'P005', productName: 'Trà Sữa Trân Châu Đường Đen', quantity: 1, price: 35000 }
+      { productId: '3', productName: 'Nước Mắm Hạnh Phúc 500ml', quantity: 2, price: 120000 },
+      { productId: '5', productName: 'Trà Sữa Trân Châu Đường Đen', quantity: 1, price: 35000 }
     ],
     totalAmount: 275000,
     status: OrderStatus.PENDING,
@@ -99,7 +104,7 @@ export const SALES_DATA: SalesData[] = [
 export const MOCK_LOGS: InventoryLog[] = [
   {
     id: 'LOG-001',
-    productId: 'P001',
+    productId: '1',
     productName: 'Cơm Tấm Sườn Bì Chả',
     type: 'IMPORT',
     quantity: 50,
@@ -111,7 +116,7 @@ export const MOCK_LOGS: InventoryLog[] = [
 ];
 
 export const MOCK_SUPPLIERS: Supplier[] = [
-  { id: 'S001', name: 'Công ty Thực Phẩm Sạch', phone: '02838640800', email: 'orders@cleanfood.vn', address: 'KCN Tân Bình, HCM' },
-  { id: 'S002', name: 'Kho Hàng Gia Dụng Tổng Hợp', phone: '0909123456', email: 'sales@giadung.com', address: 'Q12, TP.HCM' },
-  { id: 'S003', name: 'Xưởng May Mặc Thời Trang', phone: '0987654321', email: 'fashion@workshop.vn', address: 'Hóc Môn, TP.HCM' }
+  { id: '1', code: 'S001', name: 'Công ty Thực Phẩm Sạch', phone: '02838640800', email: 'orders@cleanfood.vn', address: 'KCN Tân Bình, HCM' },
+  { id: '2', code: 'S002', name: 'Kho Hàng Gia Dụng Tổng Hợp', phone: '0909123456', email: 'sales@giadung.com', address: 'Q12, TP.HCM' },
+  { id: '3', code: 'S003', name: 'Xưởng May Mặc Thời Trang', phone: '0987654321', email: 'fashion@workshop.vn', address: 'Hóc Môn, TP.HCM' }
 ];

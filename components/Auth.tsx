@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { ShieldCheck, Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
+import { ShieldCheck, UserCircle, Lock, Loader2, ArrowRight } from 'lucide-react';
 import { UserRole } from '../types';
 
 interface AuthProps {
@@ -20,15 +20,15 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     setError(null);
 
     try {
-      // 1. HARDCODED DEMO ACCOUNTS
-      if (email === 'admin@demo.com' && password === '123456') {
-        await new Promise(r => setTimeout(r, 1000));
+      // 1. HARDCODED DEMO ACCOUNTS (UPDATED)
+      if (email === 'admin' && password === 'admin') {
+        await new Promise(r => setTimeout(r, 800)); // Giả lập loading nhẹ
         onLoginSuccess('ADMIN');
         return;
       }
       
-      if (email === 'staff@demo.com' && password === '123456') {
-        await new Promise(r => setTimeout(r, 1000));
+      if (email === 'demo' && password === 'demo') {
+        await new Promise(r => setTimeout(r, 800));
         onLoginSuccess('STAFF');
         return;
       }
@@ -53,8 +53,6 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
       }
 
       if (data.user) {
-        // Trong thực tế, role sẽ được lấy từ bảng profiles hoặc jwt claim
-        // Tạm thời mặc định là ADMIN cho user mới
         onLoginSuccess('ADMIN');
       }
       
@@ -82,13 +80,13 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
         <div className="p-8">
           <form onSubmit={handleAuth} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Tài khoản / Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
-                  type="email"
+                  type="text"
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none"
-                  placeholder="admin@demo.com"
+                  placeholder="admin"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
@@ -103,7 +101,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 <input
                   type="password"
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none"
-                  placeholder="••••••"
+                  placeholder="admin"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
@@ -117,12 +115,16 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               </div>
             )}
 
-            <div className="text-xs space-y-2">
-               <div className="bg-blue-50 text-blue-800 p-2 rounded border border-blue-100">
-                  <strong>Admin:</strong> admin@demo.com / 123456 <br/> (Full quyền)
+            <div className="grid grid-cols-2 gap-3 text-xs">
+               <div className="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors" onClick={() => { setEmail('admin'); setPassword('admin'); }}>
+                  <div className="font-bold mb-1">Quản trị viên</div>
+                  <div>TK: admin</div>
+                  <div>MK: admin</div>
                </div>
-               <div className="bg-slate-50 text-slate-700 p-2 rounded border border-slate-200">
-                  <strong>Nhân viên:</strong> staff@demo.com / 123456 <br/> (Bán hàng, không xem giá vốn)
+               <div className="bg-slate-50 text-slate-700 p-2.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => { setEmail('demo'); setPassword('demo'); }}>
+                  <div className="font-bold mb-1">Nhân viên</div>
+                  <div>TK: demo</div>
+                  <div>MK: demo</div>
                </div>
             </div>
 
@@ -133,7 +135,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : (
                 <>
-                  {mode === 'LOGIN' ? 'Đăng nhập' : 'Đăng ký ngay'}
+                  {mode === 'LOGIN' ? 'Đăng nhập hệ thống' : 'Đăng ký tài khoản'}
                   <ArrowRight size={18} />
                 </>
               )}
@@ -145,11 +147,13 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               onClick={() => {
                 setMode(mode === 'LOGIN' ? 'SIGNUP' : 'LOGIN');
                 setError(null);
+                setEmail('');
+                setPassword('');
               }}
               className="text-sm text-slate-500 hover:text-blue-600 font-medium transition-colors"
             >
               {mode === 'LOGIN' 
-                ? "Chưa có tài khoản? Đăng ký ngay" 
+                ? "Chưa có tài khoản? Đăng ký Cloud" 
                 : "Đã có tài khoản? Đăng nhập"}
             </button>
           </div>

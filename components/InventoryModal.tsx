@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle } from 'lucide-react';
+import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle, AlertTriangle, Camera } from 'lucide-react';
 import { Product, InventoryType, Customer, Supplier } from '../types';
+import { QRScanner } from './QRScanner';
 
 interface InventoryItem {
   product: Product;
@@ -18,6 +19,19 @@ interface InventoryModalProps {
   suppliers: Supplier[];
 }
 
+const formatNumber = (num: number) => {
+  return new Intl.NumberFormat('vi-VN').format(num);
+};
+
+const parseNumber = (str: string) => {
+  return Number(str.replace(/\./g, '').replace(/[^0-9]/g, ''));
+};
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+};
+
+
 export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose, onConfirm, initialProduct, products, customers, suppliers }) => {
   const [type, setType] = useState<InventoryType>('IMPORT');
   const [cart, setCart] = useState<InventoryItem[]>([]);
@@ -28,6 +42,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
   // Search state for adding items
   const [searchTerm, setSearchTerm] = useState('');
   const [showProductSearch, setShowProductSearch] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -35,22 +50,36 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
       setReferenceDoc('');
       setNote('');
       setCart([]);
+      setShowScanner(false);
       
       if (initialProduct) {
-        // If opened from a specific product, add it immediately
         addToCart(initialProduct, type === 'IMPORT' ? (initialProduct.importPrice || 0) : initialProduct.price);
       }
     }
-  }, [isOpen, initialProduct]); // Remove 'type' dependency to avoid resetting cart when switching tabs
+  }, [isOpen, initialProduct]);
 
   const addToCart = (product: Product, defaultPrice: number) => {
     setCart(prev => {
       const exists = prev.find(item => item.product.id === product.id);
-      if (exists) return prev; // Already in cart
+      if (exists) {
+          // If exist, increment
+          return prev.map(item => item.product.id === product.id ? {...item, quantity: item.quantity + 1} : item);
+      }
       return [...prev, { product, quantity: 1, price: defaultPrice }];
     });
     setSearchTerm('');
     setShowProductSearch(false);
+  };
+
+  const handleScan = (code: string) => {
+      const product = products.find(p => p.code === code);
+      if (product) {
+          addToCart(product, type === 'IMPORT' ? (product.importPrice || 0) : product.price);
+          setShowScanner(false);
+      } else {
+          alert(`Không tìm thấy sản phẩm với mã: ${code}`);
+          setShowScanner(false);
+      }
   };
 
   const updateCartItem = (index: number, field: 'quantity' | 'price', value: number) => {
@@ -66,17 +95,27 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
+
+    if (type === 'EXPORT') {
+      const insufficientItems = cart.filter(item => item.quantity > item.product.stock);
+      
+      if (insufficientItems.length > 0) {
+        const errorMsg = insufficientItems.map(item => 
+          `- ${item.product.name}: Xuất ${item.quantity} / Tồn ${item.product.stock}`
+        ).join('\n');
+        
+        alert(`⚠️ KHÔNG THỂ XUẤT KHO!\n\nSố lượng xuất vượt quá tồn kho hiện tại:\n${errorMsg}\n\nVui lòng điều chỉnh lại số lượng.`);
+        return;
+      }
+    }
+
     onConfirm(cart, type, supplier, referenceDoc, note);
     onClose();
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
-  };
-
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) && 
-    !cart.find(item => item.product.id === p.id) // Exclude items already in cart
+    !cart.find(item => item.product.id === p.id) 
   );
 
   const totalValue = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
@@ -85,6 +124,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
+      {showScanner && (
+          <QRScanner onScan={handleScan} onClose={() => setShowScanner(false)} />
+      )}
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden max-h-[95vh]">
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -178,7 +220,16 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
 
                 {/* Add Product Search */}
                 <div className="pt-4 border-t border-slate-200">
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Thêm sản phẩm vào phiếu</label>
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="block text-sm font-medium text-slate-700">Thêm sản phẩm</label>
+                        <button 
+                            type="button" 
+                            onClick={() => setShowScanner(true)}
+                            className="text-xs flex items-center gap-1 bg-gray-800 text-white px-2 py-1 rounded hover:bg-gray-900"
+                        >
+                            <Camera size={12} /> Quét QR
+                        </button>
+                    </div>
                     <div className="relative">
                         <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                         <input
@@ -210,7 +261,6 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                 )}
                             </div>
                         )}
-                        {/* Overlay to close search */}
                         {showProductSearch && (
                             <div className="fixed inset-0 z-10" onClick={() => setShowProductSearch(false)}></div>
                         )}
@@ -225,44 +275,52 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                         <div className="h-full flex flex-col items-center justify-center text-slate-300">
                             <Package size={64} className="mb-4 opacity-50" />
                             <p className="text-lg font-medium">Chưa có sản phẩm nào</p>
-                            <p className="text-sm">Tìm kiếm sản phẩm bên trái để thêm vào phiếu</p>
+                            <p className="text-sm">Tìm kiếm hoặc quét QR để thêm</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
-                             {cart.map((item, index) => (
-                                 <div key={item.product.id} className="flex gap-4 p-3 rounded-xl border border-slate-100 bg-white hover:border-blue-200 hover:shadow-sm transition-all items-center">
-                                     <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                             {cart.map((item, index) => {
+                                 const isError = type === 'EXPORT' && item.quantity > item.product.stock;
+                                 return (
+                                 <div key={item.product.id} className={`flex gap-4 p-3 rounded-xl border bg-white hover:shadow-sm transition-all items-start ${isError ? 'border-red-300 bg-red-50' : 'border-slate-100 hover:border-blue-200'}`}>
+                                     <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 mt-1">
                                         {item.product.imageUrl ? <img src={item.product.imageUrl} className="w-full h-full object-cover rounded-lg" /> : <Package size={20} className="text-slate-400" />}
                                      </div>
-                                     <div className="flex-1 min-w-0">
+                                     <div className="flex-1 min-w-0 pt-1">
                                          <h4 className="text-sm font-bold text-slate-800 truncate" title={item.product.name}>{item.product.name}</h4>
-                                         <p className="text-xs text-slate-500">Tồn hiện tại: {item.product.stock}</p>
+                                         <p className={`text-xs ${isError ? 'text-red-600 font-bold' : 'text-slate-500'}`}>
+                                            Tồn hiện tại: {item.product.stock}
+                                         </p>
                                      </div>
-                                     <div className="flex items-center gap-3">
+                                     <div className="flex items-start gap-3">
                                          <div className="w-20">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase block mb-0.5">Số lượng</label>
                                             <input 
                                                 type="number" min="1" 
-                                                className="w-full px-2 py-1 border border-slate-200 rounded text-sm text-center font-bold"
+                                                className={`w-full px-2 py-1 border rounded text-sm text-center font-bold ${isError ? 'border-red-400 text-red-600 focus:ring-red-200' : 'border-slate-200 text-slate-900'}`}
                                                 value={item.quantity}
                                                 onChange={(e) => updateCartItem(index, 'quantity', Number(e.target.value))}
                                             />
                                          </div>
-                                         <div className="w-28">
+                                         <div className="w-32">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase block mb-0.5">{type === 'IMPORT' ? 'Giá nhập' : 'Giá xuất'}</label>
                                             <input 
-                                                type="number" min="0" 
+                                                type="text" 
                                                 className="w-full px-2 py-1 border border-slate-200 rounded text-sm text-right"
-                                                value={item.price}
-                                                onChange={(e) => updateCartItem(index, 'price', Number(e.target.value))}
+                                                value={formatNumber(item.price)}
+                                                onChange={(e) => updateCartItem(index, 'price', parseNumber(e.target.value))}
+                                                placeholder="0"
                                             />
+                                            <div className="text-[10px] text-blue-600 font-medium text-right mt-0.5 truncate">
+                                                {formatCurrency(item.price)}
+                                            </div>
                                          </div>
-                                         <button onClick={() => removeCartItem(index)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg mt-4">
+                                         <button onClick={() => removeCartItem(index)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg mt-3.5">
                                              <Trash2 size={18} />
                                          </button>
                                      </div>
                                  </div>
-                             ))}
+                             )})}
                         </div>
                     )}
                 </div>

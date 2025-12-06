@@ -15,7 +15,8 @@ export interface User {
 }
 
 export interface Customer {
-  id: string;
+  id: string; // Database UUID
+  code: string; // Business ID (e.g. C001)
   name: string;
   email: string;
   phone: string;
@@ -23,7 +24,8 @@ export interface Customer {
 }
 
 export interface Supplier {
-  id: string;
+  id: string; // Database UUID
+  code: string; // Business ID (e.g. S001)
   name: string;
   email: string;
   phone: string;
@@ -31,7 +33,8 @@ export interface Supplier {
 }
 
 export interface Product {
-  id: string;
+  id: string; // Database UUID
+  code: string; // Business ID (e.g. P001)
   name: string;
   price: number; // Giá bán
   importPrice: number; // Giá vốn (Giá nhập bình quân)
@@ -39,6 +42,11 @@ export interface Product {
   category: string;
   origin?: string;
   imageUrl?: string;
+  // New fields
+  expiryDate?: string; // Hạn sử dụng
+  batchNumber?: string; // Số lô
+  description?: string; // Mô tả chi tiết
+  catalogUrl?: string; // Link tài liệu/Catalogue
 }
 
 export interface OrderItem {

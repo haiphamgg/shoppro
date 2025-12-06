@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Phone, Mail, MapPin, Save, XCircle } from 'lucide-react';
+import { X, User, Phone, Mail, MapPin, Save, XCircle, Hash } from 'lucide-react';
 import { Customer } from '../types';
 
 interface CustomerModalProps {
@@ -10,6 +10,7 @@ interface CustomerModalProps {
 }
 
 export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+  const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -18,11 +19,13 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
+        setCode(initialData.code);
         setName(initialData.name);
         setEmail(initialData.email);
         setPhone(initialData.phone);
         setAddress(initialData.address);
       } else {
+        setCode('');
         setName('');
         setEmail('');
         setPhone('');
@@ -35,6 +38,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
     e.preventDefault();
     const newCustomer: Customer = {
       id: initialData ? initialData.id : `C${Date.now()}`,
+      code: code || `KH${Math.floor(Date.now() / 1000)}`, // Default code
       name,
       email,
       phone,
@@ -60,10 +64,20 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Họ và tên</label>
-            <input type="text" required className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-              value={name} onChange={(e) => setName(e.target.value)} placeholder="Nhập tên khách hàng" />
+          <div className="flex gap-4">
+             <div className="w-1/3">
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Mã KH</label>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input type="text" className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all uppercase"
+                    value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Tự động" />
+                </div>
+             </div>
+             <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Họ và tên</label>
+                <input type="text" required className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                  value={name} onChange={(e) => setName(e.target.value)} placeholder="Nhập tên khách hàng" />
+             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

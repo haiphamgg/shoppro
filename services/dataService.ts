@@ -5,10 +5,10 @@ import { MOCK_ORDERS, MOCK_PRODUCTS, MOCK_LOGS, MOCK_SUPPLIERS } from '../consta
 // --- MAPPING HELPERS ---
 
 const mapRowToOrder = (row: any): Order => ({
-  id: row.id,
+  id: String(row.id),
   customerId: row.customer_id || 'GUEST',
   customerName: row.customer_name || 'Khách lẻ',
-  items: row.items || [],
+  items: typeof row.items === 'string' ? JSON.parse(row.items) : (row.items || []),
   totalAmount: Number(row.total_amount) || 0,
   status: (row.status as OrderStatus) || OrderStatus.PENDING,
   date: row.created_at || new Date().toISOString()
@@ -18,36 +18,47 @@ const mapOrderToRow = (order: Order) => ({
   id: order.id,
   customer_id: order.customerId,
   customer_name: order.customerName,
-  items: order.items,
+  items: JSON.stringify(order.items), 
   total_amount: order.totalAmount,
   status: order.status,
   created_at: order.date
 });
 
 const mapRowToProduct = (row: any): Product => ({
-  id: row.id,
+  id: String(row.id),
+  code: row.code || '',
   name: row.name,
   price: Number(row.price) || 0,
   importPrice: Number(row.import_price) || 0,
   stock: Number(row.stock) || 0,
   category: row.category || 'Khác',
   origin: row.origin || 'Chưa rõ',
-  imageUrl: row.image_url || ''
+  imageUrl: row.image_url || '',
+  expiryDate: row.expiry_date,
+  batchNumber: row.batch_number,
+  description: row.description,
+  catalogUrl: row.catalog_url
 });
 
 const mapProductToRow = (product: Product) => ({
   id: product.id,
+  code: product.code,
   name: product.name,
   price: product.price,
   import_price: product.importPrice,
   stock: product.stock,
   category: product.category,
   origin: product.origin,
-  image_url: product.imageUrl
+  image_url: product.imageUrl,
+  expiry_date: product.expiryDate || null, 
+  batch_number: product.batchNumber || null,
+  description: product.description || null,
+  catalog_url: product.catalogUrl || null
 });
 
 const mapRowToCustomer = (row: any): Customer => ({
-  id: row.id,
+  id: String(row.id),
+  code: row.code || '',
   name: row.name,
   email: row.email || '',
   phone: row.phone || '',
@@ -56,14 +67,16 @@ const mapRowToCustomer = (row: any): Customer => ({
 
 const mapCustomerToRow = (customer: Customer) => ({
   id: customer.id,
+  code: customer.code,
   name: customer.name,
-  email: customer.email,
+  email: customer.email || null,
   phone: customer.phone,
-  address: customer.address
+  address: customer.address || null
 });
 
 const mapRowToSupplier = (row: any): Supplier => ({
-  id: row.id,
+  id: String(row.id),
+  code: row.code || '',
   name: row.name,
   email: row.email || '',
   phone: row.phone || '',
@@ -72,15 +85,16 @@ const mapRowToSupplier = (row: any): Supplier => ({
 
 const mapSupplierToRow = (supplier: Supplier) => ({
   id: supplier.id,
+  code: supplier.code,
   name: supplier.name,
-  email: supplier.email,
+  email: supplier.email || null,
   phone: supplier.phone,
-  address: supplier.address
+  address: supplier.address || null
 });
 
 const mapRowToLog = (row: any): InventoryLog => ({
-  id: row.id,
-  productId: row.product_id,
+  id: String(row.id),
+  productId: String(row.product_id),
   productName: row.products?.name || 'Unknown Product',
   type: row.type as InventoryType,
   quantity: row.quantity,
@@ -97,38 +111,41 @@ const mapRowToLog = (row: any): InventoryLog => ({
 
 export const dataService = {
   // --- UTILS ---
-  async uploadImage(file: File): Promise<string> {
+  async uploadFile(file: File, bucket: string = 'product-images'): Promise<string> {
     if (!isSupabaseConfigured) {
       await new Promise(r => setTimeout(r, 1000));
       return URL.createObjectURL(file);
     }
 
     const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9]/g, '_'); 
+    const fileName = `${Date.now()}_${cleanFileName}.${fileExt}`;
     const filePath = `${fileName}`;
 
     try {
       const { error: uploadError } = await supabase.storage
-        .from('product-images')
+        .from(bucket)
         .upload(filePath, file);
 
       if (uploadError) {
-        // Suppress 'Bucket not found' error as it's common in dev/demo environments
         if (uploadError.message.includes('Bucket not found') || uploadError.message.includes('not found')) {
-          console.warn('Storage bucket "product-images" missing. Using local URL.');
-        } else {
-          console.error('Upload Error:', uploadError);
+          console.warn(`Storage bucket "${bucket}" missing. Using local URL.`);
+          return URL.createObjectURL(file);
         }
-        // Fallback to local URL if upload fails
-        return URL.createObjectURL(file);
+        console.error('Upload Error:', uploadError);
+        throw uploadError;
       }
 
-      const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
+      const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
       return data.publicUrl;
     } catch (error) {
-      console.warn('Upload failed, using local preview:', error);
+      console.warn('Upload failed, falling back to local object URL:', error);
       return URL.createObjectURL(file);
     }
+  },
+
+  async uploadImage(file: File): Promise<string> {
+      return this.uploadFile(file, 'product-images');
   },
 
   // --- ORDERS ---
@@ -143,9 +160,11 @@ export const dataService = {
 
   async createOrder(order: Order): Promise<Order> {
     if (!isSupabaseConfigured) return order;
-    const row = mapOrderToRow(order);
+    // For orders, we might still want to let DB generate ID
+    const { id, ...row } = mapOrderToRow(order);
     const { data, error } = await supabase.from('orders').insert([row]).select().single();
     if (error) throw error;
+    if (!data) throw new Error("Tạo đơn hàng thành công nhưng không nhận được phản hồi.");
     return mapRowToOrder(data);
   },
 
@@ -156,6 +175,7 @@ export const dataService = {
       .update({ customer_name: row.customer_name, items: row.items, total_amount: row.total_amount, status: row.status })
       .eq('id', order.id).select().single();
     if (error) throw error;
+    if (!data) throw new Error("Cập nhật đơn hàng thành công nhưng không nhận được phản hồi.");
     return mapRowToOrder(data);
   },
 
@@ -177,9 +197,19 @@ export const dataService = {
 
   async createProduct(product: Product): Promise<Product> {
     if (!isSupabaseConfigured) return product;
-    const row = mapProductToRow(product);
+    // Exclude ID to let DB generate UUID/Int. Include 'code'.
+    const { id, ...row } = mapProductToRow(product);
+    
+    // Log the payload for debugging
+    console.log("Creating product with payload:", row);
+
     const { data, error } = await supabase.from('products').insert([row]).select().single();
-    if (error) throw error;
+    
+    if (error) {
+        console.error("Supabase Create Product Error:", JSON.stringify(error, null, 2));
+        throw error;
+    }
+    if (!data) throw new Error("Tạo sản phẩm thành công nhưng không nhận được phản hồi từ Server.");
     return mapRowToProduct(data);
   },
 
@@ -188,6 +218,7 @@ export const dataService = {
     const row = mapProductToRow(product);
     const { data, error } = await supabase.from('products').update(row).eq('id', product.id).select().single();
     if (error) throw error;
+    if (!data) throw new Error("Cập nhật sản phẩm thành công nhưng không nhận được phản hồi từ Server.");
     return mapRowToProduct(data);
   },
 
@@ -196,13 +227,11 @@ export const dataService = {
     type: InventoryType, 
     quantity: number, 
     transactionPrice: number, 
-    supplier: string,
-    referenceDoc: string,
+    supplier: string, 
+    referenceDoc: string, 
     note: string
   ): Promise<void> {
     const newStock = type === 'IMPORT' ? product.stock + quantity : product.stock - quantity;
-    
-    // TÍNH GIÁ VỐN BÌNH QUÂN
     let newImportPrice = product.importPrice;
     
     if (type === 'IMPORT' && transactionPrice > 0) {
@@ -233,9 +262,9 @@ export const dataService = {
       old_stock: product.stock,
       new_stock: newStock,
       price: transactionPrice,
-      supplier,
-      reference_doc: referenceDoc,
-      note
+      supplier: supplier || null,
+      reference_doc: referenceDoc || null,
+      note: note || null
     }]);
     
     if (logError) console.error("Error logging inventory", logError);
@@ -273,9 +302,12 @@ export const dataService = {
 
   async createCustomer(customer: Customer): Promise<Customer> {
     if (!isSupabaseConfigured) return customer;
-    const row = mapCustomerToRow(customer);
+    // Exclude ID, let DB generate
+    const { id, ...row } = mapCustomerToRow(customer);
+    
     const { data, error } = await supabase.from('customers').insert([row]).select().single();
     if (error) throw error;
+    if (!data) throw new Error("Tạo khách hàng thành công nhưng không nhận được phản hồi.");
     return mapRowToCustomer(data);
   },
 
@@ -284,6 +316,7 @@ export const dataService = {
     const row = mapCustomerToRow(customer);
     const { data, error } = await supabase.from('customers').update(row).eq('id', customer.id).select().single();
     if (error) throw error;
+    if (!data) throw new Error("Cập nhật khách hàng thành công nhưng không nhận được phản hồi.");
     return mapRowToCustomer(data);
   },
 
@@ -305,9 +338,12 @@ export const dataService = {
 
   async createSupplier(supplier: Supplier): Promise<Supplier> {
     if (!isSupabaseConfigured) return supplier;
-    const row = mapSupplierToRow(supplier);
+    // Exclude ID, let DB generate
+    const { id, ...row } = mapSupplierToRow(supplier);
+    
     const { data, error } = await supabase.from('suppliers').insert([row]).select().single();
     if (error) throw error;
+    if (!data) throw new Error("Tạo NCC thành công nhưng không nhận được phản hồi.");
     return mapRowToSupplier(data);
   },
 
@@ -316,6 +352,7 @@ export const dataService = {
     const row = mapSupplierToRow(supplier);
     const { data, error } = await supabase.from('suppliers').update(row).eq('id', supplier.id).select().single();
     if (error) throw error;
+    if (!data) throw new Error("Cập nhật NCC thành công nhưng không nhận được phản hồi.");
     return mapRowToSupplier(data);
   },
 
