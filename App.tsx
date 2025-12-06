@@ -85,49 +85,34 @@ const App: React.FC = () => {
 
   // Helper to handle save errors gracefully
   const handleSaveError = (error: any, context: string) => {
-    // Log detailed error to console
-    console.error(`Error saving ${context} (Raw):`, error);
-    if (typeof error === 'object') {
-        try {
-            console.error(`Error saving ${context} (JSON):`, JSON.stringify(error, null, 2));
-        } catch(e) {}
-    }
+    console.error(`Error saving ${context}:`, error);
     
     let message = 'Lỗi không xác định';
     
-    try {
-      if (typeof error === 'string') {
-        message = error;
-      } else if (error instanceof Error) {
+    // 1. Try to get native Error message
+    if (error instanceof Error) {
         message = error.message;
-      } else if (error && typeof error === 'object') {
-        // Handle Supabase/Postgrest Error Object
-        const msg = error.message || error.error_description || error.msg;
-        const details = error.details || error.hint;
-        const code = error.code;
-
-        // Check for specific Postgres error codes
-        if (code === '42703') { // undefined_column
-            message = `Lỗi cấu trúc dữ liệu: Cột không tồn tại trong Database.\n\nNguyên nhân: Bạn đang cố lưu các trường mới (như code, expiry_date...) nhưng bảng trong Supabase chưa có các cột này.\n\nGiải pháp: Hãy vào Supabase > SQL Editor và chạy lệnh thêm cột.`;
-        } else if (msg) {
-             message = typeof msg === 'object' ? JSON.stringify(msg) : String(msg);
-             if (details) message += `\nChi tiết: ${details}`;
-             if (code) message += ` (Code: ${code})`;
+    } 
+    // 2. Try to get Supabase specific fields
+    else if (typeof error === 'object' && error !== null) {
+        if (error.code === '42703') {
+             message = "Lỗi cấu trúc dữ liệu: Cột không tồn tại. Vui lòng cập nhật Database SQL để thêm các cột mới.";
         } else {
-             message = JSON.stringify(error, null, 2);
+             message = error.message || error.error_description || error.msg || JSON.stringify(error);
         }
-      }
-    } catch (e) {
-      message = 'Lỗi nghiêm trọng khi đọc thông báo lỗi.';
+    }
+    // 3. Fallback for strings
+    else if (typeof error === 'string') {
+        message = error;
     }
 
-    // Final safety check
-    if (!message || message === '{}' || message.includes('[object Object]')) {
-         try {
-             message = JSON.stringify(error, null, 2);
-         } catch {
-             message = "Không thể đọc chi tiết lỗi. Vui lòng xem Console (F12) để biết thêm.";
-         }
+    // Safety cleanup
+    if (typeof message !== 'string') {
+        message = "Chi tiết lỗi có định dạng không hỗ trợ (Xem Console)";
+    }
+    
+    if (message.includes('[object Object]')) {
+        message = "Lỗi hệ thống (Xem Console để biết chi tiết)";
     }
 
     alert(`⚠️ Không thể lưu ${context}:\n\n${message}`);
