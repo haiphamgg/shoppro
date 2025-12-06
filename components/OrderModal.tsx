@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, User, Save, XCircle, CheckCircle, Camera, ShoppingBag, DollarSign, UserPlus, TicketPercent, Calculator } from 'lucide-react';
+import { X, Plus, Trash2, User, Save, XCircle, CheckCircle, Camera, ShoppingBag, DollarSign, UserPlus, TicketPercent, Calculator, Package, Search } from 'lucide-react';
 import { Order, OrderStatus, Product, OrderItem, Customer, Promotion } from '../types';
 import { dataService } from '../services/dataService';
 import { QRScanner } from './QRScanner';
@@ -15,6 +15,14 @@ interface OrderModalProps {
   onQuickAddCustomer: () => void;
 }
 
+const formatNumber = (num: number) => {
+  return new Intl.NumberFormat('vi-VN').format(num);
+};
+
+const parseNumber = (str: string) => {
+  return Number(str.replace(/\./g, '').replace(/[^0-9]/g, ''));
+};
+
 export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, initialData, products, customers, onQuickAddCustomer }) => {
   const [customerName, setCustomerName] = useState('');
   const [status, setStatus] = useState<OrderStatus>(OrderStatus.PENDING);
@@ -25,14 +33,14 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
   const [availablePromotions, setAvailablePromotions] = useState<Promotion[]>([]);
   const [selectedPromotionId, setSelectedPromotionId] = useState<string>('');
 
+  // Product Search inside Modal
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+
   useEffect(() => {
     // Load promotions when modal opens
     if (isOpen) {
         dataService.getPromotions().then(promos => {
-            // Filter active and valid date
-            const now = new Date();
-            // Simple check: Start date <= now <= End date
-            // Note: In production, consider timezone carefuly.
             const valid = promos.filter(p => p.isActive); 
             setAvailablePromotions(valid);
         });
@@ -50,17 +58,14 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
         setItems([]);
         setSelectedPromotionId('');
       }
+      setProductSearchTerm('');
     }
     setShowScanner(false);
   }, [isOpen, initialData]);
 
-  const handleAddItem = (product?: Product) => {
-    const prodToAdd = product || (products.length > 0 ? products[0] : null);
-    if (!prodToAdd) return;
-
+  const handleAddItem = (product: Product) => {
     setItems(prev => {
-        // Check if exists, just inc quantity
-        const existingIdx = prev.findIndex(i => i.productId === prodToAdd.id);
+        const existingIdx = prev.findIndex(i => i.productId === product.id);
         if (existingIdx >= 0) {
             const newItems = [...prev];
             newItems[existingIdx].quantity += 1;
@@ -68,16 +73,17 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
         }
         return [
             ...prev,
-            { productId: prodToAdd.id, productName: prodToAdd.name, quantity: 1, price: prodToAdd.price }
+            { productId: product.id, productName: product.name, quantity: 1, price: product.price }
         ];
     });
+    setProductSearchTerm('');
+    setShowProductDropdown(false);
   };
 
   const handleScan = (code: string) => {
       const product = products.find(p => p.code === code);
       if (product) {
           handleAddItem(product);
-          // Optional: Beep sound or toast
           setShowScanner(false);
       } else {
           alert(`Không tìm thấy sản phẩm với mã: ${code}`);
@@ -87,14 +93,7 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
 
   const handleUpdateItem = (index: number, field: keyof OrderItem, value: any) => {
     const newItems = [...items];
-    if (field === 'productId') {
-      const product = products.find(p => p.id === value);
-      if (product) {
-        newItems[index] = { ...newItems[index], productId: product.id, productName: product.name, price: product.price };
-      }
-    } else {
-      newItems[index] = { ...newItems[index], [field]: value };
-    }
+    newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
   };
 
@@ -114,15 +113,12 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
       
       const total = calculateTotal();
       
-      // Check Order Value Condition
       if (promo.minOrderValue && total < promo.minOrderValue) return 0;
       
-      // Check Customer Spending Condition
       const existingCustomer = customers.find(c => c.name === customerName);
       const spending = existingCustomer ? (existingCustomer.totalSpending || 0) : 0;
       if (promo.minCustomerSpending && spending < promo.minCustomerSpending) return 0;
 
-      // Calculate
       if (promo.type === 'DISCOUNT_AMOUNT') return promo.value;
       if (promo.type === 'DISCOUNT_PERCENT') return Math.round(total * (promo.value / 100));
       
@@ -140,12 +136,17 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (items.length === 0) {
+        alert("Vui lòng thêm ít nhất 1 sản phẩm vào đơn hàng.");
+        return;
+    }
+
     const existingCustomer = customers.find(c => c.name === customerName);
     
     const newOrder: Order = {
-      id: initialData ? initialData.id : `ORD-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`,
-      customerId: existingCustomer ? existingCustomer.id : (initialData ? initialData.customerId : `GUEST-${Date.now()}`),
-      customerName,
+      id: initialData ? initialData.id : `ORD-${Date.now()}`,
+      customerId: existingCustomer ? existingCustomer.id : (initialData ? initialData.customerId : `GUEST`),
+      customerName: customerName || 'Khách lẻ',
       items,
       totalAmount,
       discountAmount: discount,
@@ -158,6 +159,11 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
     onClose();
   };
 
+  const filteredProducts = products.filter(p => 
+      p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) || 
+      (p.code && p.code.toLowerCase().includes(productSearchTerm.toLowerCase()))
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -166,8 +172,8 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
           <QRScanner onScan={handleScan} onClose={() => setShowScanner(false)} />
       )}
       
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-slate-100">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col border border-slate-100">
+        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl">
           <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
                  <ShoppingBag size={20} />
@@ -179,197 +185,252 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/30">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Khách hàng</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input
-                    type="text"
-                    list="customer-list-order"
-                    required
-                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
-                    value={customerName}
-                    onChange={handleCustomerSelect}
-                    placeholder="Tìm hoặc nhập tên khách hàng"
-                    />
-                    <datalist id="customer-list-order">
-                    {customers.map(c => (
-                        <option key={c.id} value={c.name}>{c.phone} - {c.rank || 'Member'}</option>
-                    ))}
-                    </datalist>
-                </div>
-                <button
-                    type="button"
-                    onClick={onQuickAddCustomer}
-                    className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center"
-                    title="Thêm nhanh khách hàng"
-                >
-                    <UserPlus size={20} />
-                </button>
-              </div>
-            </div>
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Trạng thái</label>
-              <select
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all appearance-none font-medium bg-white"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as OrderStatus)}
-              >
-                {Object.values(OrderStatus).map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <div className="flex justify-between items-center mb-4">
-              <label className="block text-sm font-bold text-slate-700">Chi tiết sản phẩm</label>
-              <div className="flex gap-2">
-                <button
-                    type="button"
-                    onClick={() => setShowScanner(true)}
-                    className="px-3 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-colors flex items-center gap-1.5 text-xs font-bold shadow-md shadow-slate-500/20"
-                >
-                    <Camera size={14} /> Quét QR
-                </button>
-                <button
-                    type="button"
-                    onClick={() => handleAddItem()}
-                    className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1.5 text-xs font-bold"
-                >
-                    <Plus size={14} /> Thêm SP
-                </button>
-              </div>
-            </div>
-            
-            <div className="space-y-3">
-              {items.length === 0 ? (
-                <div className="py-12 border-2 border-dashed border-slate-200 rounded-xl text-center flex flex-col items-center justify-center text-slate-400">
-                  <ShoppingBag size={48} className="mb-3 opacity-20" />
-                  <p className="font-medium">Chưa có sản phẩm nào</p>
-                  <p className="text-xs">Nhấn "Thêm SP" hoặc "Quét QR" để bắt đầu</p>
-                </div>
-              ) : (
-                items.map((item, index) => (
-                  <div key={index} className="flex flex-col sm:flex-row gap-3 items-start sm:items-end bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <div className="flex-1 w-full">
-                      <label className="text-[10px] text-slate-500 mb-1 block uppercase font-bold">Sản phẩm</label>
-                      <select
-                        className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none bg-white font-medium"
-                        value={item.productId}
-                        onChange={(e) => handleUpdateItem(index, 'productId', e.target.value)}
-                      >
-                        {products.map(p => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} {p.model ? `(${p.model})` : ''} - Tồn: {p.stock}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex gap-3 w-full sm:w-auto">
-                        <div className="w-24">
-                        <label className="text-[10px] text-slate-500 mb-1 block uppercase font-bold">Số lượng</label>
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto bg-slate-50/30 flex flex-col">
+          <div className="p-6 space-y-6">
+            {/* 1. Customer & Status Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Khách hàng</label>
+                <div className="flex gap-2">
+                    <div className="relative flex-1">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input
-                            type="number"
-                            min="1"
-                            className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none text-center font-bold"
-                            value={item.quantity}
-                            onChange={(e) => handleUpdateItem(index, 'quantity', parseInt(e.target.value))}
+                        type="text"
+                        list="customer-list-order"
+                        required
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
+                        value={customerName}
+                        onChange={handleCustomerSelect}
+                        placeholder="Tìm hoặc nhập tên khách hàng"
                         />
-                        </div>
-                        <div className="w-32">
-                             <label className="text-[10px] text-slate-500 mb-1 block uppercase font-bold text-right">Thành tiền</label>
-                             <div className="h-[42px] flex items-center justify-end font-bold text-blue-600 bg-white border border-slate-200 rounded-lg px-3">
-                                {(item.price * item.quantity).toLocaleString()}đ
-                             </div>
-                        </div>
-                        <button
-                        type="button"
-                        onClick={() => handleRemoveItem(index)}
-                        className="w-[42px] h-[42px] flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                        >
-                        <Trash2 size={20} />
-                        </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {items.length > 0 && (
-             <div className="bg-gradient-to-br from-white to-blue-50 p-5 rounded-xl border border-blue-100 shadow-sm space-y-4">
-                
-                {/* Promotion Selector */}
-                <div className="pb-4 border-b border-blue-100">
-                    <label className="text-sm font-bold text-slate-800 flex items-center gap-1.5 mb-2">
-                        <TicketPercent size={18} className="text-blue-600"/> 
-                        Chọn mã khuyến mãi
-                    </label>
-                    <select 
-                        className="w-full p-3 border border-blue-200 rounded-xl text-sm outline-none bg-white shadow-sm font-medium focus:ring-2 focus:ring-blue-500/20"
-                        value={selectedPromotionId}
-                        onChange={(e) => setSelectedPromotionId(e.target.value)}
-                    >
-                        <option value="">-- Không sử dụng khuyến mãi --</option>
-                        {availablePromotions.map(p => (
-                            <option key={p.id} value={p.id}>
-                                {p.code} - {p.name} ({p.type === 'DISCOUNT_PERCENT' ? `-${p.value}%` : `-${p.value.toLocaleString()}đ`})
-                            </option>
+                        <datalist id="customer-list-order">
+                        {customers.map(c => (
+                            <option key={c.id} value={c.name}>{c.phone} - {c.rank || 'Member'}</option>
                         ))}
-                    </select>
-                    {selectedPromotionId && discount === 0 && (
-                        <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
-                            <XCircle size={12} /> Đơn hàng chưa đủ điều kiện để áp dụng mã này (giá trị tối thiểu hoặc hạng thành viên).
-                        </p>
-                    )}
+                        </datalist>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onQuickAddCustomer}
+                        className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center"
+                        title="Thêm nhanh khách hàng"
+                    >
+                        <UserPlus size={20} />
+                    </button>
+                </div>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Trạng thái đơn</label>
+                <select
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all appearance-none font-medium bg-white"
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as OrderStatus)}
+                >
+                    {Object.values(OrderStatus).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                    ))}
+                </select>
+                </div>
+            </div>
+
+            {/* 2. Product Table */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[300px]">
+                {/* Product Search Bar */}
+                <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center gap-4">
+                    <div className="relative flex-1 max-w-lg">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input
+                            type="text"
+                            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
+                            placeholder="Nhập tên hoặc mã sản phẩm để thêm..."
+                            value={productSearchTerm}
+                            onChange={(e) => {
+                                setProductSearchTerm(e.target.value);
+                                setShowProductDropdown(true);
+                            }}
+                            onFocus={() => setShowProductDropdown(true)}
+                        />
+                        
+                        {/* Dropdown Results */}
+                        {showProductDropdown && productSearchTerm && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-60 overflow-y-auto z-50 animate-fade-in custom-scrollbar">
+                                {filteredProducts.length > 0 ? (
+                                    filteredProducts.map(p => (
+                                        <div 
+                                            key={p.id} 
+                                            className="p-3 hover:bg-blue-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
+                                            onClick={() => handleAddItem(p)}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                    {p.imageUrl ? <img src={p.imageUrl} className="w-full h-full object-cover rounded-lg"/> : <Package size={16} className="text-slate-400"/>}
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-bold text-slate-800">{p.name}</div>
+                                                    <div className="text-xs text-slate-500 font-mono">{p.code} • Tồn: {p.stock}</div>
+                                                </div>
+                                            </div>
+                                            <span className="text-sm font-bold text-blue-600">{formatNumber(p.price)}</span>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="p-4 text-sm text-center text-slate-500">Không tìm thấy sản phẩm</div>
+                                )}
+                            </div>
+                        )}
+                        {showProductDropdown && (
+                            <div className="fixed inset-0 z-40" onClick={() => setShowProductDropdown(false)}></div>
+                        )}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setShowScanner(true)}
+                        className="px-4 py-2.5 bg-slate-800 text-white rounded-xl hover:bg-slate-900 transition-colors flex items-center gap-2 text-sm font-bold shadow-md shadow-slate-500/20"
+                    >
+                        <Camera size={16} /> Quét mã
+                    </button>
                 </div>
 
-                <div className="space-y-2">
-                    <div className="flex justify-between items-center text-sm">
-                        <span className="text-slate-500">Tổng tiền hàng</span>
-                        <span className="font-bold text-slate-800 text-lg">{totalAmount.toLocaleString()} đ</span>
-                    </div>
-                    
-                    {discount > 0 ? (
-                        <div className="flex justify-between items-center text-sm bg-green-50 p-2 rounded-lg border border-green-100">
-                            <span className="text-green-700 font-bold flex items-center gap-1"><TicketPercent size={14}/> Giảm giá</span>
-                            <span className="font-bold text-green-700">- {discount.toLocaleString()} đ</span>
-                        </div>
-                    ) : (
-                        <div className="flex justify-between items-center text-sm opacity-50">
-                            <span className="text-slate-500">Giảm giá</span>
-                            <span className="font-medium text-slate-700">0 đ</span>
-                        </div>
-                    )}
+                {/* Table Header */}
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase">
+                            <tr>
+                                <th className="px-4 py-3 w-10">#</th>
+                                <th className="px-4 py-3">Sản phẩm</th>
+                                <th className="px-4 py-3 w-32 text-center">Đơn giá</th>
+                                <th className="px-4 py-3 w-24 text-center">Số lượng</th>
+                                <th className="px-4 py-3 w-32 text-right">Thành tiền</th>
+                                <th className="px-4 py-3 w-12 text-center"></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 bg-white">
+                            {items.length > 0 ? (
+                                items.map((item, index) => (
+                                    <tr key={index} className="hover:bg-blue-50/20 transition-colors">
+                                        <td className="px-4 py-3 text-slate-400 text-center">{index + 1}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="font-bold text-slate-800">{item.productName}</div>
+                                            <div className="text-xs text-slate-400">{products.find(p => p.id === item.productId)?.code || '---'}</div>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <input 
+                                                type="text" 
+                                                className="w-full px-2 py-1 border border-slate-200 rounded text-center text-slate-600 focus:border-blue-500 outline-none"
+                                                value={formatNumber(item.price)}
+                                                onChange={(e) => handleUpdateItem(index, 'price', parseNumber(e.target.value))}
+                                            />
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center justify-center">
+                                                <button type="button" onClick={() => handleUpdateItem(index, 'quantity', Math.max(1, item.quantity - 1))} className="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-l hover:bg-slate-200 text-slate-600">-</button>
+                                                <input 
+                                                    type="number" 
+                                                    min="1"
+                                                    className="w-10 py-1 text-center border-y border-slate-200 focus:border-blue-500 outline-none font-bold"
+                                                    value={item.quantity}
+                                                    onChange={(e) => handleUpdateItem(index, 'quantity', parseInt(e.target.value))}
+                                                />
+                                                <button type="button" onClick={() => handleUpdateItem(index, 'quantity', item.quantity + 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 rounded-r hover:bg-slate-200 text-slate-600">+</button>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-bold text-slate-800">
+                                            {formatNumber(item.price * item.quantity)}
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleRemoveItem(index)}
+                                                className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
+                                        <div className="flex flex-col items-center justify-center">
+                                            <ShoppingBag size={48} className="mb-3 opacity-20" />
+                                            <p className="font-medium">Chưa có sản phẩm nào</p>
+                                            <p className="text-xs">Tìm kiếm hoặc quét mã để thêm</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-                    <div className="flex justify-between items-center pt-3 border-t border-blue-200 mt-2">
-                        <span className="text-lg font-bold text-slate-800">Khách phải trả</span>
-                        <span className="text-3xl font-bold text-blue-700 flex items-center gap-1">
-                            {finalAmount.toLocaleString()} <span className="text-sm text-slate-500 font-normal mt-2">VNĐ</span>
-                        </span>
+            {/* 3. Summary & Promotion */}
+            {items.length > 0 && (
+             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row gap-6">
+                    {/* Promotion Selector */}
+                    <div className="flex-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block flex items-center gap-1.5">
+                            <TicketPercent size={14}/> Khuyến mãi
+                        </label>
+                        <select 
+                            className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none bg-white font-medium focus:ring-2 focus:ring-blue-500/20"
+                            value={selectedPromotionId}
+                            onChange={(e) => setSelectedPromotionId(e.target.value)}
+                        >
+                            <option value="">-- Không sử dụng --</option>
+                            {availablePromotions.map(p => (
+                                <option key={p.id} value={p.id}>
+                                    {p.code} - {p.name} ({p.type === 'DISCOUNT_PERCENT' ? `-${p.value}%` : `-${formatNumber(p.value)}đ`})
+                                </option>
+                            ))}
+                        </select>
+                        {selectedPromotionId && discount === 0 && (
+                            <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
+                                <XCircle size={12} /> Đơn hàng chưa đủ điều kiện áp dụng.
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Totals */}
+                    <div className="w-full sm:w-72 space-y-2">
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-500">Tổng tiền hàng</span>
+                            <span className="font-bold text-slate-800">{formatNumber(totalAmount)} đ</span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-500">Giảm giá</span>
+                            <span className={`font-medium ${discount > 0 ? 'text-green-600' : 'text-slate-700'}`}>
+                                {discount > 0 ? `-${formatNumber(discount)}` : '0'} đ
+                            </span>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-2">
+                            <span className="text-base font-bold text-slate-800">Khách phải trả</span>
+                            <span className="text-2xl font-bold text-blue-600">
+                                {formatNumber(finalAmount)}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
-          )}
+            )}
+          </div>
         </form>
 
-        <div className="p-5 border-t border-slate-100 bg-white rounded-b-2xl flex justify-end gap-3 z-10">
+        <div className="p-5 border-t border-slate-100 bg-white rounded-b-2xl grid grid-cols-2 gap-4 z-10">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors flex items-center gap-2"
+            className="w-full py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
           >
             <XCircle size={18} />
             Hủy bỏ
           </button>
           <button
             onClick={handleSubmit}
-            className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center gap-2"
+            className="w-full py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center justify-center gap-2"
           >
             {initialData ? <Save size={18} /> : <CheckCircle size={18} />}
             {initialData ? 'Lưu thay đổi' : 'Hoàn tất đơn hàng'}

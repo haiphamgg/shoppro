@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Edit, Trash, Eye, Calendar, User, Package } from 'lucide-react';
+import { Plus, Search, Filter, Edit, Trash, Eye, Calendar, User, Package, TrendingDown } from 'lucide-react';
 import { Order, OrderStatus } from '../types';
 
 interface OrderListProps {
@@ -24,14 +25,16 @@ const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 };
 
-// Date formatter dd/mm/yyyy
+// Date formatter dd/mm/yyyy HH:mm
 const formatDate = (dateString: string) => {
   if (!dateString) return '';
   const date = new Date(dateString);
   const d = date.getDate().toString().padStart(2, '0');
   const m = (date.getMonth() + 1).toString().padStart(2, '0');
   const y = date.getFullYear();
-  return `${d}/${m}/${y}`;
+  const h = date.getHours().toString().padStart(2, '0');
+  const min = date.getMinutes().toString().padStart(2, '0');
+  return `${d}/${m}/${y} ${h}:${min}`;
 };
 
 export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDeleteOrder, onEditOrder }) => {
@@ -57,7 +60,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDele
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
               type="text"
-              placeholder="Tìm kiếm đơn hàng..."
+              placeholder="Tìm kiếm đơn hàng, khách hàng..."
               className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -83,7 +86,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDele
           className="w-full sm:w-auto flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-blue-500/30 active:scale-95"
         >
           <Plus size={18} />
-          <span>Tạo đơn hàng</span>
+          <span>Tạo đơn bán hàng</span>
         </button>
       </div>
 
@@ -95,9 +98,11 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDele
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Mã đơn</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Khách hàng</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Ngày tạo</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Tổng tiền</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Trạng thái</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Ngày GD</th>
+                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Tổng tiền</th>
+                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Khuyến mãi</th>
+                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Thực thu</th>
+                <th className="px-6 py-4 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Trạng thái</th>
                 <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Thao tác</th>
               </tr>
             </thead>
@@ -110,7 +115,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDele
                         <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center mr-3 font-bold text-xs">
                           #{order.id.slice(-3)}
                         </span>
-                        <span className="font-medium text-slate-700 text-sm">{order.id}</span>
+                        <span className="font-medium text-slate-700 text-sm truncate max-w-[100px]" title={order.id}>{order.id}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -122,23 +127,32 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDele
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                       {formatDate(order.date)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-slate-500 font-medium">
                       {formatCurrency(order.totalAmount)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusStyles(order.status)}`}>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                      {order.discountAmount && order.discountAmount > 0 ? (
+                          <span className="text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded flex items-center justify-end gap-1 ml-auto w-fit">
+                              <TrendingDown size={12} /> -{formatCurrency(order.discountAmount)}
+                          </span>
+                      ) : (
+                          <span className="text-slate-300">0 ₫</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-blue-700 text-base">
+                      {formatCurrency(order.finalAmount || order.totalAmount)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span className={`px-2.5 py-1 inline-flex text-xs leading-4 font-semibold rounded-full border ${getStatusStyles(order.status)}`}>
                         {order.status}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                        <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Xem">
-                          <Eye size={18} />
-                        </button>
                         <button 
                           onClick={() => onEditOrder(order)}
-                          className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all" 
-                          title="Sửa"
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" 
+                          title="Xem & Sửa"
                         >
                           <Edit size={18} />
                         </button>
@@ -155,7 +169,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDele
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-slate-500">
+                  <td colSpan={8} className="px-6 py-16 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-300">
                         <Package size={32} />
@@ -177,7 +191,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDele
               <div key={order.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm active:scale-[0.99] transition-transform">
                 <div className="flex justify-between items-start mb-3">
                   <div>
-                    <div className="text-xs text-slate-400 mb-0.5">{order.id}</div>
+                    <div className="text-xs text-slate-400 mb-0.5">#{order.id}</div>
                     <div className="font-semibold text-slate-800 text-lg">{order.customerName}</div>
                   </div>
                   <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${getStatusStyles(order.status)}`}>
@@ -188,30 +202,44 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDele
                 <div className="flex items-center gap-4 text-sm text-slate-500 mb-3 pb-3 border-b border-slate-50">
                   <div className="flex items-center gap-1.5">
                     <Calendar size={14} />
-                    {formatDate(order.date)}
+                    {formatDate(order.date).split(' ')[0]}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Package size={14} />
-                    {order.items.length} sản phẩm
+                    {order.items.length} SP
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center">
-                  <span className="text-lg font-bold text-blue-600">{formatCurrency(order.totalAmount)}</span>
-                  <div className="flex gap-1">
+                <div className="flex flex-col gap-1.5 mb-3">
+                    <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Tổng tiền hàng:</span>
+                        <span className="font-medium text-slate-700">{formatCurrency(order.totalAmount)}</span>
+                    </div>
+                    {order.discountAmount && order.discountAmount > 0 && (
+                        <div className="flex justify-between text-sm">
+                            <span className="text-slate-500">Giảm giá:</span>
+                            <span className="font-medium text-emerald-600">-{formatCurrency(order.discountAmount)}</span>
+                        </div>
+                    )}
+                    <div className="flex justify-between text-base pt-2 border-t border-slate-50 mt-1">
+                        <span className="font-bold text-slate-800">Thực thu:</span>
+                        <span className="font-bold text-blue-600">{formatCurrency(order.finalAmount || order.totalAmount)}</span>
+                    </div>
+                </div>
+
+                <div className="flex gap-2">
                     <button 
                       onClick={() => onEditOrder(order)}
-                      className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100"
+                      className="flex-1 py-2 bg-slate-50 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-100 text-sm font-medium flex items-center justify-center gap-2"
                     >
-                      <Edit size={16} />
+                      <Edit size={16} /> Chi tiết & Sửa
                     </button>
                     <button 
                       onClick={() => onDeleteOrder(order.id)}
-                      className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
+                      className="px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm"
                     >
                       <Trash size={16} />
                     </button>
-                  </div>
                 </div>
               </div>
             ))

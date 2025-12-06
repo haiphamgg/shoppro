@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
-import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle, AlertTriangle, Camera, Calendar, List, Info, TrendingUp, UserPlus, Wallet } from 'lucide-react';
-import { Product, InventoryType, Customer, Supplier } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle, AlertTriangle, Camera, Calendar, List, Info, TrendingUp, UserPlus, Wallet, TicketPercent, XCircle } from 'lucide-react';
+import { Product, InventoryType, Customer, Supplier, Promotion } from '../types';
+import { dataService } from '../services/dataService';
 import { QRScanner } from './QRScanner';
 
 interface InventoryItem {
@@ -14,7 +15,18 @@ interface InventoryItem {
 interface InventoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (items: { product: Product, quantity: number, price: number, newSellingPrice?: number }[], type: InventoryType, supplier: string, doc: string, note: string, date: string, paidAmount?: number) => void;
+  // Updated signature to include discount info
+  onConfirm: (
+      items: { product: Product, quantity: number, price: number, newSellingPrice?: number }[], 
+      type: InventoryType, 
+      supplier: string, 
+      doc: string, 
+      note: string, 
+      date: string, 
+      paidAmount?: number,
+      discountAmount?: number,
+      promotionId?: string
+  ) => void;
   initialProduct: Product | null;
   products: Product[];
   customers: Customer[];
@@ -43,18 +55,20 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
   const [referenceDoc, setReferenceDoc] = useState('');
   const [note, setNote] = useState('');
   const [date, setDate] = useState('');
-  const [paidAmount, setPaidAmount] = useState<number>(0); // New: Số tiền thanh toán
-  const [isPaidAmountTouched, setIsPaidAmountTouched] = useState(false); // Check if user manually entered payment
+  const [paidAmount, setPaidAmount] = useState<number>(0); 
+  const [isPaidAmountTouched, setIsPaidAmountTouched] = useState(false);
   
+  // Promotions State
+  const [availablePromotions, setAvailablePromotions] = useState<Promotion[]>([]);
+  const [selectedPromotionId, setSelectedPromotionId] = useState<string>('');
+
   // Mobile Tab State
   const [activeTab, setActiveTab] = useState<'INFO' | 'CART'>('INFO');
   
-  // Search state for adding items
   const [searchTerm, setSearchTerm] = useState('');
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
-  // Auto calculate total for payment default
   const totalValue = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
 
   useEffect(() => {
@@ -63,22 +77,22 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
       setReferenceDoc('');
       setNote('');
       setCart([]);
-      setDate(new Date().toISOString().split('T')[0]); // Default to today
+      setDate(new Date().toISOString().split('T')[0]); 
       setShowScanner(false);
-      setActiveTab('INFO'); // Reset tab on open
+      setActiveTab('INFO'); 
       setPaidAmount(0);
       setIsPaidAmountTouched(false);
+      setSelectedPromotionId('');
       
+      dataService.getPromotions().then(promos => {
+          setAvailablePromotions(promos.filter(p => p.isActive));
+      });
+
       if (initialProduct) {
         addToCart(initialProduct);
       }
     }
   }, [isOpen, initialProduct]);
-
-  // Update paid amount if user hasn't touched it yet (default to full payment?) 
-  // Requirement: "nếu không nhập đủ hoặc để trống thì mặc định chuyển qua nợ"
-  // So default paidAmount should probably be 0 or empty visually, but let's initialize to 0. 
-  // If user leaves it 0, debt = total.
 
   const addToCart = (product: Product) => {
     const defaultPrice = type === 'IMPORT' ? (product.importPrice || 0) : product.price;
@@ -92,7 +106,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
           product, 
           quantity: 1, 
           price: defaultPrice,
-          newSellingPrice: product.price // Mặc định giá bán mới bằng giá bán hiện tại
+          newSellingPrice: product.price 
       }];
     });
     setSearchTerm('');
@@ -120,6 +134,35 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
     setCart(cart.filter((_, i) => i !== index));
   };
 
+  // Calculate Discount Logic
+  const discountAmount = useMemo(() => {
+      if (type !== 'EXPORT' || !selectedPromotionId) return 0;
+      
+      const promo = availablePromotions.find(p => p.id === selectedPromotionId);
+      if (!promo) return 0;
+
+      // Check Min Order Value
+      if (promo.minOrderValue && totalValue < promo.minOrderValue) return 0;
+      
+      // Check Min Customer Spending
+      // Try exact match first, then loose match
+      const selectedCustomer = customers.find(c => 
+          c.name.trim().toLowerCase() === supplier.trim().toLowerCase()
+      );
+      
+      if (promo.minCustomerSpending) {
+          const currentSpending = selectedCustomer ? (selectedCustomer.totalSpending || 0) : 0;
+          if (currentSpending < promo.minCustomerSpending) return 0;
+      }
+
+      if (promo.type === 'DISCOUNT_AMOUNT') return promo.value;
+      if (promo.type === 'DISCOUNT_PERCENT') return Math.round(totalValue * (promo.value / 100));
+
+      return 0;
+  }, [selectedPromotionId, totalValue, type, availablePromotions, supplier, customers]);
+
+  const finalExportValue = Math.max(0, totalValue - discountAmount);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) {
@@ -140,13 +183,11 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
       }
     }
 
-    // Determine final paid amount. If user didn't touch it, it remains 0 (Full Debt).
-    // Or if user entered something, use that.
-    onConfirm(cart, type, supplier, referenceDoc, note, date, paidAmount);
+    // Pass detailed info to Parent
+    onConfirm(cart, type, supplier, referenceDoc, note, date, paidAmount, discountAmount, selectedPromotionId);
     onClose();
   };
 
-  // Reset prices in cart when switching types
   useEffect(() => {
      if (cart.length > 0) {
          setCart(prev => prev.map(item => ({
@@ -154,6 +195,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
              price: type === 'IMPORT' ? (item.product.importPrice || 0) : item.product.price
          })));
      }
+     if (type === 'IMPORT') setSelectedPromotionId('');
   }, [type]);
 
   const filteredProducts = products.filter(p => 
@@ -178,7 +220,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
             <div className={`p-2 rounded-lg ${type === 'IMPORT' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>
                 {type === 'IMPORT' ? <ArrowDownCircle size={20} /> : <ArrowUpCircle size={20} />}
             </div>
-            {type === 'IMPORT' ? 'Nhập Kho' : 'Xuất Kho'}
+            {type === 'IMPORT' ? 'Nhập Kho' : 'Xuất Kho (Bán hàng nhanh)'}
           </h3>
           <button onClick={onClose} className="p-2 -mr-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
             <X size={24} />
@@ -331,7 +373,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                     className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-slate-50 focus:bg-white"
                                     value={supplier}
                                     onChange={(e) => setSupplier(e.target.value)}
-                                    placeholder="Tìm đối tác..."
+                                    placeholder={type === 'IMPORT' ? "Tìm nhà cung cấp..." : "Nhập tên khách hàng..."}
                                 />
                                 <datalist id="suppliers-list-inv">
                                     {suppliers.map(s => <option key={s.id} value={s.name}>{s.phone}</option>)}
@@ -468,6 +510,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
 
                 {/* Footer Summary - Sticky on Mobile */}
                 <div className="p-4 sm:p-6 border-t border-slate-200 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-30">
+                     {/* IMPORT: DEBT LOGIC */}
                      {type === 'IMPORT' && (
                          <div className="mb-4 bg-yellow-50 p-3 rounded-xl border border-yellow-100">
                              <div className="flex justify-between items-center mb-2">
@@ -494,27 +537,64 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                          </div>
                      )}
 
+                     {/* EXPORT: PROMOTION LOGIC */}
+                     {type === 'EXPORT' && (
+                         <div className="mb-4 bg-gradient-to-br from-white to-purple-50 p-3 rounded-xl border border-purple-100">
+                             <div className="flex justify-between items-center mb-2">
+                                 <label className="text-xs font-bold text-purple-700 uppercase flex items-center gap-1">
+                                     <TicketPercent size={14} /> Áp dụng khuyến mãi
+                                 </label>
+                                 <select 
+                                     className="w-48 text-xs border border-purple-200 rounded-lg p-1.5 outline-none focus:ring-2 focus:ring-purple-500/20 bg-white"
+                                     value={selectedPromotionId}
+                                     onChange={(e) => setSelectedPromotionId(e.target.value)}
+                                 >
+                                     <option value="">-- Không sử dụng --</option>
+                                     {availablePromotions.map(p => (
+                                         <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                                     ))}
+                                 </select>
+                             </div>
+                             {discountAmount > 0 && (
+                                 <div className="flex justify-between items-center text-sm text-green-600 font-medium pt-2 border-t border-purple-100/50">
+                                     <span>Đã giảm giá:</span>
+                                     <span>-{formatCurrency(discountAmount)}</span>
+                                 </div>
+                             )}
+                         </div>
+                     )}
+
                      <div className="flex justify-between items-center mb-4">
                          <div>
                              <p className="text-xs text-slate-500 uppercase font-bold">Tổng số lượng</p>
                              <p className="text-lg font-bold text-slate-800">{cart.reduce((s, i) => s + i.quantity, 0)}</p>
                          </div>
                          <div className="text-right">
-                             <p className="text-xs text-slate-500 uppercase font-bold">Tổng giá trị phiếu</p>
-                             <p className="text-2xl font-bold text-blue-600">{formatCurrency(totalValue)}</p>
+                             <p className="text-xs text-slate-500 uppercase font-bold">
+                                 {type === 'EXPORT' && discountAmount > 0 ? 'Thành tiền (Sau KM)' : 'Tổng giá trị phiếu'}
+                             </p>
+                             <div className="flex flex-col items-end">
+                                 {(type === 'EXPORT' && discountAmount > 0) && (
+                                     <span className="text-xs text-slate-400 line-through decoration-slate-400">{formatCurrency(totalValue)}</span>
+                                 )}
+                                 <p className="text-2xl font-bold text-blue-600">
+                                     {type === 'EXPORT' ? formatCurrency(finalExportValue) : formatCurrency(totalValue)}
+                                 </p>
+                             </div>
                          </div>
                      </div>
-                     <div className="flex gap-3">
+                     <div className="grid grid-cols-2 gap-4">
                         <button
                             onClick={onClose}
-                            className="flex-1 py-3.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors md:hidden"
+                            className="w-full py-3.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
                         >
+                            <XCircle size={18} />
                             Đóng
                         </button>
                         <button
                             onClick={handleSubmit}
                             disabled={cart.length === 0}
-                            className="flex-[2] md:w-full px-6 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold hover:shadow-lg hover:shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            className="w-full px-6 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold hover:shadow-lg hover:shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                             <CheckCircle size={20} />
                             Hoàn tất

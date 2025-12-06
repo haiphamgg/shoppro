@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Plus, Search, Edit, Trash, User, Phone, Mail, MapPin, Wallet, Crown, Settings, RefreshCw, Save, X } from 'lucide-react';
+import { Plus, Search, Edit, Trash, User, Phone, Mail, MapPin, Wallet, Crown, Settings, RefreshCw, Save, X, TrendingUp } from 'lucide-react';
 import { Customer, CustomerRank } from '../types';
 
 interface CustomerListProps {
@@ -41,14 +41,31 @@ export const CustomerList: React.FC<CustomerListProps> = ({ customers, onAddCust
   }, [ranks]);
 
   const getRank = (spending: number) => {
-      // Sort ranks desc by minSpending
+      // Sort ranks desc by minSpending to find current rank
       const sortedRanks = [...editingRanks].sort((a, b) => b.minSpending - a.minSpending);
       for (const rank of sortedRanks) {
           if (spending >= rank.minSpending) {
               return rank;
           }
       }
-      return { name: 'Thành viên', color: 'bg-slate-50 text-slate-500 border-slate-100' };
+      return { name: 'Thành viên', color: 'bg-slate-50 text-slate-500 border-slate-100', minSpending: 0 };
+  };
+
+  const getNextRank = (spending: number) => {
+      // Sort ranks asc by minSpending to find next target
+      const sortedRanks = [...editingRanks].sort((a, b) => a.minSpending - b.minSpending);
+      return sortedRanks.find(r => r.minSpending > spending);
+  };
+
+  // Helper to get a solid color for the progress bar based on the tailwind class string
+  const getProgressColor = (colorClass: string) => {
+      if (colorClass.includes('yellow')) return 'bg-yellow-500';
+      if (colorClass.includes('cyan')) return 'bg-cyan-500';
+      if (colorClass.includes('purple')) return 'bg-purple-500';
+      if (colorClass.includes('emerald')) return 'bg-emerald-500';
+      if (colorClass.includes('rose')) return 'bg-rose-500';
+      if (colorClass.includes('blue')) return 'bg-blue-500';
+      return 'bg-blue-600'; // Default
   };
 
   const handleUpdateRankItem = (index: number, field: keyof CustomerRank, value: any) => {
@@ -140,7 +157,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({ customers, onAddCust
                     <tr>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Họ và tên</th>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Liên hệ</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Hạng & Chi tiêu</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase w-64">Hạng & Chi tiêu</th>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Địa chỉ</th>
                         <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase">Thao tác</th>
                     </tr>
@@ -148,7 +165,19 @@ export const CustomerList: React.FC<CustomerListProps> = ({ customers, onAddCust
                     <tbody className="bg-white divide-y divide-slate-50">
                     {filteredCustomers.length > 0 ? (
                         filteredCustomers.map((customer) => {
-                            const rank = getRank(customer.totalSpending || 0);
+                            const currentSpending = customer.totalSpending || 0;
+                            const rank = getRank(currentSpending);
+                            const nextRank = getNextRank(currentSpending);
+                            
+                            let progressPercent = 0;
+                            let remaining = 0;
+                            if (nextRank) {
+                                progressPercent = Math.min(100, (currentSpending / nextRank.minSpending) * 100);
+                                remaining = nextRank.minSpending - currentSpending;
+                            } else {
+                                progressPercent = 100;
+                            }
+
                             return (
                         <tr key={customer.id} className="hover:bg-blue-50/50 transition-colors group">
                             <td className="px-6 py-4">
@@ -173,14 +202,37 @@ export const CustomerList: React.FC<CustomerListProps> = ({ customers, onAddCust
                             </div>
                             </td>
                             <td className="px-6 py-4">
-                                <div className="flex flex-col items-start gap-1">
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${rank.color}`}>
-                                        <Crown size={10} /> {rank.name}
-                                    </span>
-                                    <span className="text-sm font-bold text-slate-700 flex items-center gap-1">
-                                        <Wallet size={12} className="text-slate-400" />
-                                        {formatCurrency(customer.totalSpending || 0)}
-                                    </span>
+                                <div className="flex flex-col items-start gap-1 w-full">
+                                    <div className="flex items-center justify-between w-full mb-1">
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${rank.color}`}>
+                                            <Crown size={10} /> {rank.name}
+                                        </span>
+                                        <span className="text-sm font-bold text-slate-700 flex items-center gap-1">
+                                            {formatCurrency(currentSpending)}
+                                        </span>
+                                    </div>
+                                    
+                                    {nextRank ? (
+                                        <div className="w-full">
+                                            <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                                                <span>{progressPercent.toFixed(0)}%</span>
+                                                <span className="flex items-center gap-1">Lên <strong className="text-slate-600">{nextRank.name}</strong></span>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                                <div 
+                                                    style={{ width: `${progressPercent}%` }} 
+                                                    className={`h-full rounded-full transition-all duration-500 ease-out ${getProgressColor(nextRank.color)}`}
+                                                ></div>
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 mt-1 text-right">
+                                                cần thêm {formatCurrency(remaining)}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-[10px] text-green-600 font-bold flex items-center gap-1 w-full justify-end mt-1">
+                                            <Crown size={10} /> Đã đạt hạng tối đa
+                                        </div>
+                                    )}
                                 </div>
                             </td>
                             <td className="px-6 py-4 text-sm text-slate-600 max-w-xs truncate" title={customer.address}>
@@ -214,7 +266,17 @@ export const CustomerList: React.FC<CustomerListProps> = ({ customers, onAddCust
                 {/* Mobile Cards */}
                 <div className="sm:hidden space-y-3">
                 {filteredCustomers.map((customer) => {
-                    const rank = getRank(customer.totalSpending || 0);
+                    const currentSpending = customer.totalSpending || 0;
+                    const rank = getRank(currentSpending);
+                    const nextRank = getNextRank(currentSpending);
+                    
+                    let progressPercent = 0;
+                    let remaining = 0;
+                    if (nextRank) {
+                        progressPercent = Math.min(100, (currentSpending / nextRank.minSpending) * 100);
+                        remaining = nextRank.minSpending - currentSpending;
+                    }
+
                     return (
                     <div key={customer.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                     <div className="flex items-start justify-between mb-3">
@@ -232,12 +294,34 @@ export const CustomerList: React.FC<CustomerListProps> = ({ customers, onAddCust
                         <button onClick={() => onDeleteCustomer(customer.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash size={18} /></button>
                         </div>
                     </div>
-                    <div className="bg-slate-50 p-2 rounded-lg mb-3 flex justify-between items-center">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${rank.color}`}>
-                                <Crown size={10} /> {rank.name}
-                        </span>
-                        <span className="font-bold text-slate-700">{formatCurrency(customer.totalSpending || 0)}</span>
+                    
+                    <div className="bg-slate-50 p-3 rounded-xl mb-3">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${rank.color}`}>
+                                    <Crown size={10} /> {rank.name}
+                            </span>
+                            <span className="font-bold text-slate-700">{formatCurrency(currentSpending)}</span>
+                        </div>
+                        
+                        {nextRank && (
+                            <div className="mt-2 pt-2 border-t border-slate-200">
+                                <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                                    <span>Tiến độ lên <strong className={nextRank.color.split(' ')[1]}>{nextRank.name}</strong></span>
+                                    <span>{progressPercent.toFixed(0)}%</span>
+                                </div>
+                                <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                                    <div 
+                                        style={{ width: `${progressPercent}%` }} 
+                                        className={`h-full rounded-full ${getProgressColor(nextRank.color)}`}
+                                    ></div>
+                                </div>
+                                <div className="text-[10px] text-slate-400 mt-1 text-right">
+                                    Cần mua thêm {formatCurrency(remaining)}
+                                </div>
+                            </div>
+                        )}
                     </div>
+
                     <div className="space-y-2 text-sm text-slate-600 border-t border-slate-50 pt-3">
                         <div className="flex items-center gap-2"><Phone size={14} className="text-slate-400"/> {customer.phone}</div>
                         <div className="flex items-center gap-2"><Mail size={14} className="text-slate-400"/> {customer.email || '---'}</div>

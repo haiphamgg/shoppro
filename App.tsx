@@ -23,7 +23,7 @@ import { AIAssistant } from './components/AIAssistant';
 import { PromotionList } from './components/PromotionList';
 import { PromotionModal } from './components/PromotionModal';
 import { Auth } from './components/Auth';
-import { ViewState, Order, Product, Customer, InventoryType, UserRole, InventoryLog, Supplier, User, Permission, Promotion, CustomerRank } from './types';
+import { ViewState, Order, Product, Customer, InventoryType, UserRole, InventoryLog, Supplier, User, Permission, Promotion, CustomerRank, OrderStatus } from './types';
 import { dataService } from './services/dataService';
 import { Menu, Bell, Loader2, Database, ShieldAlert, Copy, Check, ChevronDown, KeyRound, LogOut } from 'lucide-react';
 
@@ -339,6 +339,68 @@ const App: React.FC = () => {
     if (currentView !== 'ORDERS') setCurrentView('ORDERS');
     
     try {
+      // INVENTORY ADJUSTMENT LOGIC FOR EDITS
+      if (isEdit && editingOrder) {
+          // Only adjust if both were/are DELIVERED (meaning stock was deducted)
+          // For simplicity in this version, we assume auto-created orders are DELIVERED.
+          if (editingOrder.status === OrderStatus.DELIVERED && order.status === OrderStatus.DELIVERED) {
+              const stockAdjustments: { product: Product, diff: number }[] = [];
+              const productMap = new Map(products.map(p => [p.id, p]));
+
+              // 1. Calculate Old Quantities
+              const oldQtyMap = new Map<string, number>();
+              editingOrder.items.forEach(item => {
+                  oldQtyMap.set(item.productId, (oldQtyMap.get(item.productId) || 0) + item.quantity);
+              });
+
+              // 2. Calculate New Quantities
+              const newQtyMap = new Map<string, number>();
+              order.items.forEach(item => {
+                  newQtyMap.set(item.productId, (newQtyMap.get(item.productId) || 0) + item.quantity);
+              });
+
+              // 3. Find Differences
+              // Check all products involved
+              const allProductIds = new Set([...oldQtyMap.keys(), ...newQtyMap.keys()]);
+              
+              allProductIds.forEach(pid => {
+                  const oldQ = oldQtyMap.get(pid) || 0;
+                  const newQ = newQtyMap.get(pid) || 0;
+                  const diff = newQ - oldQ; // If positive, we sold more (reduce stock). If negative, we sold less (increase stock).
+                  
+                  if (diff !== 0) {
+                      const product = productMap.get(pid);
+                      if (product) {
+                          stockAdjustments.push({ product, diff });
+                      }
+                  }
+              });
+
+              // 4. Apply Adjustments
+              for (const adj of stockAdjustments) {
+                  // If diff is positive (e.g. 5 -> 7, diff 2), we need to EXPORT 2 more.
+                  // If diff is negative (e.g. 5 -> 3, diff -2), we need to IMPORT 2 back (return).
+                  const type = adj.diff > 0 ? 'EXPORT' : 'IMPORT';
+                  const absQty = Math.abs(adj.diff);
+                  
+                  await dataService.updateProductStock(
+                      adj.product,
+                      type,
+                      absQty,
+                      adj.product.price, // Use current price for reference
+                      `Điều chỉnh đơn ${order.id}`,
+                      order.id,
+                      'Cập nhật tự động do sửa đơn hàng',
+                      new Date().toISOString()
+                  );
+              }
+              
+              // Refresh products locally to show new stock
+              const updatedProducts = await dataService.getProducts();
+              setProducts(updatedProducts);
+          }
+      }
+
       if (isEdit) {
         await dataService.updateOrder(order);
       } else {
@@ -392,12 +454,20 @@ const App: React.FC = () => {
       doc: string, 
       note: string, 
       date: string,
-      paidAmount: number = 0
+      paidAmount: number = 0,
+      discountAmount: number = 0,
+      promotionId?: string
   ) => {
     const updatedProducts = [...products];
     const newLogs: InventoryLog[] = [];
     
     let totalBillValue = 0;
+    
+    // Use the user provided doc if available, otherwise generate a unique Order ID if it's an export
+    let finalDocId = doc;
+    if (type === 'EXPORT' && !finalDocId) {
+        finalDocId = `EXP-${Date.now().toString().slice(-6)}`;
+    }
 
     for (const item of items) {
        const productIndex = updatedProducts.findIndex(p => p.id === item.product.id);
@@ -417,7 +487,19 @@ const App: React.FC = () => {
 
        updatedProducts[productIndex] = { ...product, stock: newStock, importPrice: Math.round(newImportPrice), price: (type==='IMPORT'&&item.newSellingPrice)?item.newSellingPrice:product.price };
        newLogs.push({
-         id: `LOG-${Date.now()}`, productId: product.id, productName: product.name, type, quantity: item.quantity, oldStock: product.stock, newStock, price: item.price, supplier: supplierName, referenceDoc: doc, note, timestamp: new Date().toISOString(), date: date || new Date().toISOString()
+         id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, 
+         productId: product.id, 
+         productName: product.name, 
+         type, 
+         quantity: item.quantity, 
+         oldStock: product.stock, 
+         newStock, 
+         price: item.price, 
+         supplier: supplierName, 
+         referenceDoc: finalDocId, 
+         note, 
+         timestamp: new Date().toISOString(), 
+         date: date || new Date().toISOString()
        });
     }
 
@@ -427,7 +509,7 @@ const App: React.FC = () => {
     try {
       // 1. Update Product Stock & Create Logs
       for (const item of items) {
-        await dataService.updateProductStock(item.product, type, item.quantity, item.price, supplierName, doc, note, date, item.newSellingPrice);
+        await dataService.updateProductStock(item.product, type, item.quantity, item.price, supplierName, finalDocId, note, date, item.newSellingPrice);
       }
 
       // 2. Handle Debt logic for Import
@@ -445,7 +527,42 @@ const App: React.FC = () => {
           }
       }
 
-    } catch (error) { handleSaveError(error, 'Cập nhật kho'); }
+      // 3. AUTO CREATE ORDER FOR EXPORT (Sales)
+      if (type === 'EXPORT') {
+          // Attempt to find customer by name from the supplierName field
+          const customer = customers.find(c => c.name.trim().toLowerCase() === supplierName.trim().toLowerCase());
+          
+          const totalAmount = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+          const finalAmount = Math.max(0, totalAmount - discountAmount);
+
+          const newOrder: Order = {
+              id: finalDocId || `ORD-${Date.now()}`,
+              customerId: customer ? customer.id : 'GUEST',
+              customerName: supplierName || 'Khách lẻ',
+              items: items.map((item: any) => ({
+                  productId: item.product.id,
+                  productName: item.product.name,
+                  quantity: item.quantity,
+                  price: item.price
+              })),
+              totalAmount,
+              discountAmount,
+              finalAmount,
+              promotionId,
+              status: OrderStatus.DELIVERED, // Inventory is already deducted, so it's delivered
+              date: date || new Date().toISOString()
+          };
+
+          // Save Order
+          const createdOrder = await dataService.createOrder(newOrder);
+          setOrders([createdOrder, ...orders]);
+          
+          // Refresh customer to update spending
+          const updatedCustomers = await dataService.getCustomers();
+          setCustomers(updatedCustomers);
+      }
+
+    } catch (error) { handleSaveError(error, 'Cập nhật kho/Đơn hàng'); }
   };
 
   const handlePayDebt = async (amount: number) => {
