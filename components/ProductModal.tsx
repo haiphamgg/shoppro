@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Package, DollarSign, Layers, Tag, Globe, Upload, Image as ImageIcon, Loader2, TrendingUp } from 'lucide-react';
+import { X, Package, DollarSign, Layers, Tag, Globe, Upload, Image as ImageIcon, Loader2, TrendingUp, Save, XCircle } from 'lucide-react';
 import { Product } from '../types';
 import { dataService } from '../services/dataService';
 
@@ -37,7 +37,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
         setPrice(0);
         setImportPrice(0);
         setStock(0);
-        setCategory('Thời trang');
+        setCategory('Hàng hóa');
         setOrigin('Việt Nam');
         setPreviewUrl('');
       }
@@ -144,7 +144,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
               className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ví dụ: Áo thun Polo..."
+              placeholder="Ví dụ: Cơm tấm, Áo thun..."
             />
           </div>
 
@@ -191,7 +191,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                   className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
                   value={stock}
                   onChange={(e) => setStock(Number(e.target.value))}
-                  disabled={!!initialData} // Không cho sửa stock trực tiếp khi edit, phải dùng nhập/xuất
+                  disabled={!!initialData} 
                 />
               </div>
               {initialData && <p className="text-[10px] text-slate-400 mt-1">*Dùng chức năng Nhập/Xuất để thay đổi</p>}
@@ -205,8 +205,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                 >
+                  <option value="Hàng hóa">Hàng hóa</option>
                   <option value="Thời trang">Thời trang</option>
-                  <option value="Giày dép">Giày dép</option>
+                  <option value="Món ăn">Món ăn</option>
+                  <option value="Thức uống">Thức uống</option>
                   <option value="Điện tử">Điện tử</option>
                   <option value="Phụ kiện">Phụ kiện</option>
                   <option value="Khác">Khác</option>
@@ -224,7 +226,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                   className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
                   value={origin}
                   onChange={(e) => setOrigin(e.target.value)}
-                  placeholder="VD: Việt Nam"
+                  placeholder="VD: Việt Nam, Bếp trung tâm..."
                 />
               </div>
             </div>
@@ -234,8 +236,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
               type="button"
               onClick={onClose}
               disabled={isUploading}
-              className="px-5 py-2.5 rounded-lg border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
+              className="px-5 py-2.5 rounded-lg border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors disabled:opacity-50 flex items-center gap-2"
             >
+              <XCircle size={18} />
               Hủy bỏ
             </button>
             <button
@@ -243,7 +246,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
               disabled={isUploading}
               className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {isUploading && <Loader2 size={16} className="animate-spin" />}
+              {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
               {initialData ? 'Lưu thay đổi' : 'Tạo sản phẩm'}
             </button>
           </div>

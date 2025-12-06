@@ -22,6 +22,14 @@ export interface Customer {
   address: string;
 }
 
+export interface Supplier {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -57,7 +65,7 @@ export interface SalesData {
   orders: number;
 }
 
-export type ViewState = 'DASHBOARD' | 'ORDERS' | 'PRODUCTS' | 'CUSTOMERS' | 'INVENTORY_LOGS' | 'AI_ASSISTANT';
+export type ViewState = 'DASHBOARD' | 'ORDERS' | 'PRODUCTS' | 'CUSTOMERS' | 'SUPPLIERS' | 'INVENTORY_LOGS' | 'AI_ASSISTANT';
 
 export type InventoryType = 'IMPORT' | 'EXPORT';
 

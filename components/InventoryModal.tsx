@@ -1,43 +1,72 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, Building2 } from 'lucide-react';
-import { Product, InventoryType } from '../types';
+import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle } from 'lucide-react';
+import { Product, InventoryType, Customer, Supplier } from '../types';
+
+interface InventoryItem {
+  product: Product;
+  quantity: number;
+  price: number;
+}
 
 interface InventoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (product: Product, type: InventoryType, quantity: number, price: number, supplier: string, doc: string, note: string) => void;
-  product: Product | null;
+  onConfirm: (items: { product: Product, quantity: number, price: number }[], type: InventoryType, supplier: string, doc: string, note: string) => void;
+  initialProduct: Product | null;
+  products: Product[];
+  customers: Customer[];
+  suppliers: Supplier[];
 }
 
-export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose, onConfirm, product }) => {
+export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose, onConfirm, initialProduct, products, customers, suppliers }) => {
   const [type, setType] = useState<InventoryType>('IMPORT');
-  const [quantity, setQuantity] = useState<number>(1);
-  const [price, setPrice] = useState<number>(0);
+  const [cart, setCart] = useState<InventoryItem[]>([]);
   const [supplier, setSupplier] = useState('');
   const [referenceDoc, setReferenceDoc] = useState('');
   const [note, setNote] = useState('');
+  
+  // Search state for adding items
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showProductSearch, setShowProductSearch] = useState(false);
 
   useEffect(() => {
-    if (isOpen && product) {
-      // Khi mở, nếu là IMPORT -> Mặc định lấy giá vốn hiện tại
-      // Nếu là EXPORT -> Mặc định lấy giá bán (hoặc giá vốn tùy chính sách, ở đây để 0)
-      if (type === 'IMPORT') {
-        setPrice(product.importPrice || 0);
-      } else {
-        setPrice(product.price); // Gợi ý giá bán
-      }
-      setQuantity(1);
+    if (isOpen) {
       setSupplier('');
       setReferenceDoc('');
       setNote('');
+      setCart([]);
+      
+      if (initialProduct) {
+        // If opened from a specific product, add it immediately
+        addToCart(initialProduct, type === 'IMPORT' ? (initialProduct.importPrice || 0) : initialProduct.price);
+      }
     }
-  }, [isOpen, product, type]);
+  }, [isOpen, initialProduct]); // Remove 'type' dependency to avoid resetting cart when switching tabs
 
-  if (!isOpen || !product) return null;
+  const addToCart = (product: Product, defaultPrice: number) => {
+    setCart(prev => {
+      const exists = prev.find(item => item.product.id === product.id);
+      if (exists) return prev; // Already in cart
+      return [...prev, { product, quantity: 1, price: defaultPrice }];
+    });
+    setSearchTerm('');
+    setShowProductSearch(false);
+  };
+
+  const updateCartItem = (index: number, field: 'quantity' | 'price', value: number) => {
+    const newCart = [...cart];
+    newCart[index] = { ...newCart[index], [field]: value };
+    setCart(newCart);
+  };
+
+  const removeCartItem = (index: number) => {
+    setCart(cart.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onConfirm(product, type, quantity, price, supplier, referenceDoc, note);
+    if (cart.length === 0) return;
+    onConfirm(cart, type, supplier, referenceDoc, note);
     onClose();
   };
 
@@ -45,151 +74,220 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
   };
 
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) && 
+    !cart.find(item => item.product.id === p.id) // Exclude items already in cart
+  );
+
+  const totalValue = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[90vh]">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden max-h-[95vh]">
+        {/* Header */}
         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <Package size={20} className="text-blue-600" />
-            Điều chỉnh tồn kho
+          <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <Package size={24} className="text-blue-600" />
+            {type === 'IMPORT' ? 'Tạo Phiếu Nhập Kho' : 'Tạo Phiếu Xuất Kho'}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
-            <X size={22} />
+            <X size={24} />
           </button>
         </div>
 
-        <div className="p-5 bg-blue-50/50 border-b border-blue-100">
-           <p className="text-sm text-slate-500 mb-1">Sản phẩm:</p>
-           <p className="font-semibold text-slate-800 text-lg">{product.name}</p>
-           <div className="flex gap-4 mt-1 text-sm">
-             <span className="text-slate-600">Tồn kho: <b className="text-slate-800">{product.stock}</b></span>
-             <span className="text-slate-600">Giá vốn HT: <b className="text-slate-800">{formatCurrency(product.importPrice)}</b></span>
-           </div>
+        <div className="flex flex-col md:flex-row h-full overflow-hidden">
+            {/* LEFT: General Info & Product Search */}
+            <div className="w-full md:w-1/3 border-r border-slate-100 bg-slate-50/50 p-5 flex flex-col gap-5 overflow-y-auto">
+                {/* Type Switcher */}
+                <div className="flex gap-2 bg-white p-1 rounded-xl border border-slate-200">
+                    <button
+                    type="button"
+                    onClick={() => setType('IMPORT')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                        type === 'IMPORT' 
+                        ? 'bg-blue-100 text-blue-700 shadow-sm' 
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                    >
+                    <ArrowDownCircle size={18} /> Nhập hàng
+                    </button>
+                    <button
+                    type="button"
+                    onClick={() => setType('EXPORT')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                        type === 'EXPORT' 
+                        ? 'bg-red-100 text-red-700 shadow-sm' 
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                    >
+                    <ArrowUpCircle size={18} /> Xuất hàng
+                    </button>
+                </div>
+
+                {/* General Inputs */}
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                            {type === 'IMPORT' ? 'Nhà cung cấp' : 'Khách hàng / Người nhận'}
+                        </label>
+                        <div className="relative">
+                            {type === 'IMPORT' ? <Truck className="absolute left-3 top-2.5 text-slate-400" size={16} /> : <User className="absolute left-3 top-2.5 text-slate-400" size={16} />}
+                            <input 
+                                list={type === 'IMPORT' ? 'suppliers-list-inv' : 'customers-list-inv'}
+                                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                value={supplier}
+                                onChange={(e) => setSupplier(e.target.value)}
+                                placeholder="Tìm đối tác..."
+                            />
+                            <datalist id="suppliers-list-inv">
+                                {suppliers.map(s => <option key={s.id} value={s.name}>{s.phone}</option>)}
+                            </datalist>
+                            <datalist id="customers-list-inv">
+                                {customers.map(c => <option key={c.id} value={c.name}>{c.phone}</option>)}
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mã chứng từ / Hóa đơn</label>
+                        <div className="relative">
+                            <FileText className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                            <input
+                                type="text"
+                                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                value={referenceDoc}
+                                onChange={(e) => setReferenceDoc(e.target.value)}
+                                placeholder="VD: PO-2310"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Ghi chú</label>
+                        <textarea
+                            rows={3}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none"
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder="Ghi chú thêm..."
+                        />
+                    </div>
+                </div>
+
+                {/* Add Product Search */}
+                <div className="pt-4 border-t border-slate-200">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Thêm sản phẩm vào phiếu</label>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                        <input
+                            type="text"
+                            className="w-full pl-9 pr-4 py-2 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                            placeholder="Tìm tên sản phẩm..."
+                            value={searchTerm}
+                            onChange={(e) => { setSearchTerm(e.target.value); setShowProductSearch(true); }}
+                            onFocus={() => setShowProductSearch(true)}
+                        />
+                        {showProductSearch && searchTerm && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-100 rounded-lg shadow-xl max-h-48 overflow-y-auto z-20">
+                                {filteredProducts.length > 0 ? (
+                                    filteredProducts.map(p => (
+                                        <div 
+                                            key={p.id} 
+                                            className="p-2 hover:bg-blue-50 cursor-pointer flex justify-between items-center"
+                                            onClick={() => addToCart(p, type === 'IMPORT' ? (p.importPrice || 0) : p.price)}
+                                        >
+                                            <div>
+                                                <div className="text-sm font-medium text-slate-800">{p.name}</div>
+                                                <div className="text-xs text-slate-500">Tồn: {p.stock}</div>
+                                            </div>
+                                            <Plus size={16} className="text-blue-600" />
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="p-3 text-xs text-center text-slate-400">Không tìm thấy sản phẩm</div>
+                                )}
+                            </div>
+                        )}
+                        {/* Overlay to close search */}
+                        {showProductSearch && (
+                            <div className="fixed inset-0 z-10" onClick={() => setShowProductSearch(false)}></div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* RIGHT: Cart Items */}
+            <div className="flex-1 flex flex-col bg-white">
+                <div className="flex-1 overflow-y-auto p-5">
+                    {cart.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-300">
+                            <Package size={64} className="mb-4 opacity-50" />
+                            <p className="text-lg font-medium">Chưa có sản phẩm nào</p>
+                            <p className="text-sm">Tìm kiếm sản phẩm bên trái để thêm vào phiếu</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                             {cart.map((item, index) => (
+                                 <div key={item.product.id} className="flex gap-4 p-3 rounded-xl border border-slate-100 bg-white hover:border-blue-200 hover:shadow-sm transition-all items-center">
+                                     <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                        {item.product.imageUrl ? <img src={item.product.imageUrl} className="w-full h-full object-cover rounded-lg" /> : <Package size={20} className="text-slate-400" />}
+                                     </div>
+                                     <div className="flex-1 min-w-0">
+                                         <h4 className="text-sm font-bold text-slate-800 truncate" title={item.product.name}>{item.product.name}</h4>
+                                         <p className="text-xs text-slate-500">Tồn hiện tại: {item.product.stock}</p>
+                                     </div>
+                                     <div className="flex items-center gap-3">
+                                         <div className="w-20">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase block mb-0.5">Số lượng</label>
+                                            <input 
+                                                type="number" min="1" 
+                                                className="w-full px-2 py-1 border border-slate-200 rounded text-sm text-center font-bold"
+                                                value={item.quantity}
+                                                onChange={(e) => updateCartItem(index, 'quantity', Number(e.target.value))}
+                                            />
+                                         </div>
+                                         <div className="w-28">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase block mb-0.5">{type === 'IMPORT' ? 'Giá nhập' : 'Giá xuất'}</label>
+                                            <input 
+                                                type="number" min="0" 
+                                                className="w-full px-2 py-1 border border-slate-200 rounded text-sm text-right"
+                                                value={item.price}
+                                                onChange={(e) => updateCartItem(index, 'price', Number(e.target.value))}
+                                            />
+                                         </div>
+                                         <button onClick={() => removeCartItem(index)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg mt-4">
+                                             <Trash2 size={18} />
+                                         </button>
+                                     </div>
+                                 </div>
+                             ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer Summary */}
+                <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+                     <div>
+                         <p className="text-xs text-slate-500 uppercase font-bold">Tổng số lượng</p>
+                         <p className="text-xl font-bold text-slate-800">{cart.reduce((s, i) => s + i.quantity, 0)}</p>
+                     </div>
+                     <div className="text-right">
+                         <p className="text-xs text-slate-500 uppercase font-bold">Tổng giá trị phiếu</p>
+                         <p className="text-2xl font-bold text-blue-600">{formatCurrency(totalValue)}</p>
+                     </div>
+                     <button
+                        onClick={handleSubmit}
+                        disabled={cart.length === 0}
+                        className="ml-6 px-6 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                     >
+                        <CheckCircle size={20} />
+                        Hoàn tất
+                     </button>
+                </div>
+            </div>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
-          {/* Toggle Type */}
-          <div className="flex gap-4">
-            <button
-              type="button"
-              onClick={() => setType('IMPORT')}
-              className={`flex-1 flex flex-col items-center p-4 rounded-xl border-2 transition-all ${
-                type === 'IMPORT' 
-                  ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                  : 'border-slate-100 hover:border-slate-200 text-slate-500'
-              }`}
-            >
-              <ArrowDownCircle size={24} className="mb-2" />
-              <span className="font-semibold">Nhập hàng</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setType('EXPORT')}
-              className={`flex-1 flex flex-col items-center p-4 rounded-xl border-2 transition-all ${
-                type === 'EXPORT' 
-                  ? 'border-red-500 bg-red-50 text-red-700' 
-                  : 'border-slate-100 hover:border-slate-200 text-slate-500'
-              }`}
-            >
-              <ArrowUpCircle size={24} className="mb-2" />
-              <span className="font-semibold">Xuất hàng</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Số lượng</label>
-              <div className="relative">
-                <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-semibold"
-                  value={quantity}
-                  onChange={(e) => setQuantity(Number(e.target.value))}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                {type === 'IMPORT' ? 'Đơn giá nhập (VNĐ)' : 'Đơn giá xuất (VNĐ)'}
-              </label>
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-semibold"
-                  value={price}
-                  onChange={(e) => setPrice(Number(e.target.value))}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                {type === 'IMPORT' ? 'Nhà cung cấp' : 'Người nhận / Khách hàng'}
-              </label>
-              <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input
-                  type="text"
-                  className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                  value={supplier}
-                  onChange={(e) => setSupplier(e.target.value)}
-                  placeholder={type === 'IMPORT' ? 'VD: Cty May Mặc ABC' : 'VD: Kho Chi Nhánh 1'}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Mã chứng từ / HĐ</label>
-              <div className="relative">
-                <FileText className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input
-                  type="text"
-                  className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                  value={referenceDoc}
-                  onChange={(e) => setReferenceDoc(e.target.value)}
-                  placeholder="VD: INV-00123"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Ghi chú (Tùy chọn)</label>
-            <textarea
-              rows={2}
-              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Nhập ghi chú chi tiết..."
-            />
-          </div>
-
-          {/* Summary Preview */}
-          <div className="bg-slate-50 p-3 rounded-lg flex justify-between items-center text-sm border border-slate-100">
-             <span className="text-slate-500">Tổng giá trị:</span>
-             <span className="font-bold text-slate-800 text-lg">{formatCurrency(price * quantity)}</span>
-          </div>
-
-          <div className="pt-2">
-            <button
-              type="submit"
-              className={`w-full py-3 rounded-xl text-white font-semibold shadow-lg transition-all active:scale-[0.98] ${
-                type === 'IMPORT' 
-                  ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30' 
-                  : 'bg-red-600 hover:bg-red-700 shadow-red-500/30'
-              }`}
-            >
-              Xác nhận {type === 'IMPORT' ? 'Nhập kho' : 'Xuất kho'}
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );

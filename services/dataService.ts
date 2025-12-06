@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Order, Product, OrderStatus, Customer, InventoryLog, InventoryType } from '../types';
-import { MOCK_ORDERS, MOCK_PRODUCTS, MOCK_LOGS } from '../constants';
+import { Order, Product, OrderStatus, Customer, InventoryLog, InventoryType, Supplier } from '../types';
+import { MOCK_ORDERS, MOCK_PRODUCTS, MOCK_LOGS, MOCK_SUPPLIERS } from '../constants';
 
 // --- MAPPING HELPERS ---
 
@@ -62,6 +62,22 @@ const mapCustomerToRow = (customer: Customer) => ({
   address: customer.address
 });
 
+const mapRowToSupplier = (row: any): Supplier => ({
+  id: row.id,
+  name: row.name,
+  email: row.email || '',
+  phone: row.phone || '',
+  address: row.address || ''
+});
+
+const mapSupplierToRow = (supplier: Supplier) => ({
+  id: supplier.id,
+  name: supplier.name,
+  email: supplier.email,
+  phone: supplier.phone,
+  address: supplier.address
+});
+
 const mapRowToLog = (row: any): InventoryLog => ({
   id: row.id,
   productId: row.product_id,
@@ -91,17 +107,28 @@ export const dataService = {
     const fileName = `${Math.random()}.${fileExt}`;
     const filePath = `${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('product-images')
-      .upload(filePath, file);
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, file);
 
-    if (uploadError) {
-      console.error('Upload Error:', uploadError);
-      throw uploadError;
+      if (uploadError) {
+        // Suppress 'Bucket not found' error as it's common in dev/demo environments
+        if (uploadError.message.includes('Bucket not found') || uploadError.message.includes('not found')) {
+          console.warn('Storage bucket "product-images" missing. Using local URL.');
+        } else {
+          console.error('Upload Error:', uploadError);
+        }
+        // Fallback to local URL if upload fails
+        return URL.createObjectURL(file);
+      }
+
+      const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (error) {
+      console.warn('Upload failed, using local preview:', error);
+      return URL.createObjectURL(file);
     }
-
-    const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
-    return data.publicUrl;
   },
 
   // --- ORDERS ---
@@ -168,41 +195,37 @@ export const dataService = {
     product: Product, 
     type: InventoryType, 
     quantity: number, 
-    transactionPrice: number, // Giá nhập hoặc Giá xuất (thường dùng giá nhập để tính Average)
+    transactionPrice: number, 
     supplier: string,
     referenceDoc: string,
     note: string
   ): Promise<void> {
     const newStock = type === 'IMPORT' ? product.stock + quantity : product.stock - quantity;
     
-    // TÍNH GIÁ VỐN BÌNH QUÂN (Weighted Average Cost)
+    // TÍNH GIÁ VỐN BÌNH QUÂN
     let newImportPrice = product.importPrice;
     
     if (type === 'IMPORT' && transactionPrice > 0) {
       const currentTotalValue = product.stock * product.importPrice;
       const newImportValue = quantity * transactionPrice;
-      // Tránh chia cho 0
       if (newStock > 0) {
         newImportPrice = (currentTotalValue + newImportValue) / newStock;
       } else {
         newImportPrice = transactionPrice;
       }
     }
-    // Nếu là EXPORT, giá vốn không đổi, chỉ giảm số lượng.
 
     if (!isSupabaseConfigured) return;
 
-    // 1. Cập nhật tồn kho & giá vốn mới vào bảng Products
     const { error: prodError } = await supabase.from('products')
       .update({ 
         stock: newStock,
-        import_price: Math.round(newImportPrice) // Làm tròn
+        import_price: Math.round(newImportPrice)
       })
       .eq('id', product.id);
       
     if (prodError) throw prodError;
 
-    // 2. Ghi log chi tiết
     const { error: logError } = await supabase.from('inventory_logs').insert([{
       product_id: product.id,
       type,
@@ -267,6 +290,38 @@ export const dataService = {
   async deleteCustomer(id: string): Promise<void> {
     if (!isSupabaseConfigured) return;
     const { error } = await supabase.from('customers').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // --- SUPPLIERS ---
+  async getSuppliers(): Promise<Supplier[]> {
+    if (!isSupabaseConfigured) return MOCK_SUPPLIERS;
+    try {
+      const { data, error } = await supabase.from('suppliers').select('*').order('created_at', { ascending: false });
+      if (error) return MOCK_SUPPLIERS;
+      return data ? data.map(mapRowToSupplier) : [];
+    } catch { return MOCK_SUPPLIERS; }
+  },
+
+  async createSupplier(supplier: Supplier): Promise<Supplier> {
+    if (!isSupabaseConfigured) return supplier;
+    const row = mapSupplierToRow(supplier);
+    const { data, error } = await supabase.from('suppliers').insert([row]).select().single();
+    if (error) throw error;
+    return mapRowToSupplier(data);
+  },
+
+  async updateSupplier(supplier: Supplier): Promise<Supplier> {
+    if (!isSupabaseConfigured) return supplier;
+    const row = mapSupplierToRow(supplier);
+    const { data, error } = await supabase.from('suppliers').update(row).eq('id', supplier.id).select().single();
+    if (error) throw error;
+    return mapRowToSupplier(data);
+  },
+
+  async deleteSupplier(id: string): Promise<void> {
+    if (!isSupabaseConfigured) return;
+    const { error } = await supabase.from('suppliers').delete().eq('id', id);
     if (error) throw error;
   }
 };

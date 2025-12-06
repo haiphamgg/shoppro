@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, ShoppingCart, Package, Users, Bot, Settings, LogOut, X, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Users, Bot, Settings, LogOut, X, ClipboardList, Truck } from 'lucide-react';
 import { ViewState, UserRole } from '../types';
 
 interface SidebarProps {
@@ -18,6 +18,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isO
     { id: 'PRODUCTS', label: 'Sản phẩm', icon: Package },
     { id: 'INVENTORY_LOGS', label: 'Lịch sử kho', icon: ClipboardList },
     { id: 'CUSTOMERS', label: 'Khách hàng', icon: Users },
+    { id: 'SUPPLIERS', label: 'Nhà cung cấp', icon: Truck },
     { id: 'AI_ASSISTANT', label: 'Trợ lý AI', icon: Bot },
   ];
 

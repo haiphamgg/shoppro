@@ -1,10 +1,20 @@
 
-import { Order, OrderStatus, Product, SalesData, InventoryLog } from './types';
+import { Order, OrderStatus, Product, SalesData, InventoryLog, Supplier } from './types';
 
 export const MOCK_PRODUCTS: Product[] = [
   { 
     id: 'P001', 
-    name: 'Áo Thun Basic Premium', 
+    name: 'Cơm Tấm Sườn Bì Chả', 
+    price: 45000, 
+    importPrice: 25000,
+    stock: 50, 
+    category: 'Món ăn',
+    origin: 'Bếp trung tâm',
+    imageUrl: 'https://images.unsplash.com/photo-1595295333158-4742f28fbd85?auto=format&fit=crop&q=80&w=500'
+  },
+  { 
+    id: 'P002', 
+    name: 'Áo Thun Polo Classic', 
     price: 250000, 
     importPrice: 150000,
     stock: 120, 
@@ -13,24 +23,14 @@ export const MOCK_PRODUCTS: Product[] = [
     imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&q=80&w=500'
   },
   { 
-    id: 'P002', 
-    name: 'Quần Jeans Slim Fit', 
-    price: 450000, 
-    importPrice: 280000,
-    stock: 50, 
-    category: 'Thời trang',
-    origin: 'Việt Nam',
-    imageUrl: 'https://images.unsplash.com/photo-1542272617-08f08315805d?auto=format&fit=crop&q=80&w=500'
-  },
-  { 
     id: 'P003', 
-    name: 'Giày Sneaker Sport', 
-    price: 1200000, 
-    importPrice: 800000,
+    name: 'Nước Mắm Hạnh Phúc 500ml', 
+    price: 120000, 
+    importPrice: 95000,
     stock: 30, 
-    category: 'Giày dép',
-    origin: 'Hàn Quốc',
-    imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=500'
+    category: 'Hàng hóa',
+    origin: 'Phú Quốc',
+    imageUrl: 'https://images.unsplash.com/photo-1627485937980-221c88ac04f9?auto=format&fit=crop&q=80&w=500'
   },
   { 
     id: 'P004', 
@@ -44,13 +44,13 @@ export const MOCK_PRODUCTS: Product[] = [
   },
   { 
     id: 'P005', 
-    name: 'Đồng Hồ Thông Minh Gen 2', 
-    price: 3500000, 
-    importPrice: 2800000,
-    stock: 15, 
-    category: 'Điện tử',
-    origin: 'Mỹ',
-    imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=500'
+    name: 'Trà Sữa Trân Châu Đường Đen', 
+    price: 35000, 
+    importPrice: 15000,
+    stock: 200, 
+    category: 'Món ăn',
+    origin: 'Pha chế',
+    imageUrl: 'https://images.unsplash.com/photo-1558584725-c1f0da4b1d60?auto=format&fit=crop&q=80&w=500'
   },
 ];
 
@@ -59,8 +59,8 @@ export const MOCK_ORDERS: Order[] = [
     id: 'ORD-2023-001',
     customerId: 'C001',
     customerName: 'Nguyễn Văn A',
-    items: [{ productId: 'P001', productName: 'Áo Thun Basic Premium', quantity: 2, price: 250000 }],
-    totalAmount: 500000,
+    items: [{ productId: 'P001', productName: 'Cơm Tấm Sườn Bì Chả', quantity: 2, price: 45000 }],
+    totalAmount: 90000,
     status: OrderStatus.DELIVERED,
     date: '2023-10-15T09:30:00Z'
   },
@@ -68,8 +68,8 @@ export const MOCK_ORDERS: Order[] = [
     id: 'ORD-2023-002',
     customerId: 'C002',
     customerName: 'Trần Thị B',
-    items: [{ productId: 'P005', productName: 'Đồng Hồ Thông Minh Gen 2', quantity: 1, price: 3500000 }],
-    totalAmount: 3500000,
+    items: [{ productId: 'P002', productName: 'Áo Thun Polo Classic', quantity: 1, price: 250000 }],
+    totalAmount: 250000,
     status: OrderStatus.SHIPPING,
     date: '2023-10-20T14:15:00Z'
   },
@@ -78,30 +78,12 @@ export const MOCK_ORDERS: Order[] = [
     customerId: 'C003',
     customerName: 'Lê Văn C',
     items: [
-      { productId: 'P002', productName: 'Quần Jeans Slim Fit', quantity: 1, price: 450000 },
-      { productId: 'P004', productName: 'Balo Laptop Chống Nước', quantity: 1, price: 650000 }
+      { productId: 'P003', productName: 'Nước Mắm Hạnh Phúc 500ml', quantity: 2, price: 120000 },
+      { productId: 'P005', productName: 'Trà Sữa Trân Châu Đường Đen', quantity: 1, price: 35000 }
     ],
-    totalAmount: 1100000,
+    totalAmount: 275000,
     status: OrderStatus.PENDING,
     date: '2023-10-25T10:00:00Z'
-  },
-  {
-    id: 'ORD-2023-004',
-    customerId: 'C004',
-    customerName: 'Phạm Thị D',
-    items: [{ productId: 'P003', productName: 'Giày Sneaker Sport', quantity: 1, price: 1200000 }],
-    totalAmount: 1200000,
-    status: OrderStatus.CONFIRMED,
-    date: '2023-10-26T16:45:00Z'
-  },
-  {
-    id: 'ORD-2023-005',
-    customerId: 'C005',
-    customerName: 'Hoàng Văn E',
-    items: [{ productId: 'P001', productName: 'Áo Thun Basic Premium', quantity: 5, price: 250000 }],
-    totalAmount: 1250000,
-    status: OrderStatus.CANCELLED,
-    date: '2023-10-22T08:20:00Z'
   }
 ];
 
@@ -118,23 +100,18 @@ export const MOCK_LOGS: InventoryLog[] = [
   {
     id: 'LOG-001',
     productId: 'P001',
-    productName: 'Áo Thun Basic Premium',
+    productName: 'Cơm Tấm Sườn Bì Chả',
     type: 'IMPORT',
     quantity: 50,
-    oldStock: 70,
-    newStock: 120,
-    note: 'Nhập hàng đầu tháng',
+    oldStock: 0,
+    newStock: 50,
+    note: 'Nhập nguyên liệu đầu ngày',
     timestamp: '2023-10-01T08:00:00Z'
-  },
-  {
-    id: 'LOG-002',
-    productId: 'P003',
-    productName: 'Giày Sneaker Sport',
-    type: 'EXPORT',
-    quantity: 5,
-    oldStock: 35,
-    newStock: 30,
-    note: 'Xuất hủy do lỗi',
-    timestamp: '2023-10-05T14:30:00Z'
   }
+];
+
+export const MOCK_SUPPLIERS: Supplier[] = [
+  { id: 'S001', name: 'Công ty Thực Phẩm Sạch', phone: '02838640800', email: 'orders@cleanfood.vn', address: 'KCN Tân Bình, HCM' },
+  { id: 'S002', name: 'Kho Hàng Gia Dụng Tổng Hợp', phone: '0909123456', email: 'sales@giadung.com', address: 'Q12, TP.HCM' },
+  { id: 'S003', name: 'Xưởng May Mặc Thời Trang', phone: '0987654321', email: 'fashion@workshop.vn', address: 'Hóc Môn, TP.HCM' }
 ];

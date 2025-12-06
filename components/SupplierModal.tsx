@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Phone, Mail, MapPin, Save, XCircle } from 'lucide-react';
-import { Customer } from '../types';
+import { X, Truck, Phone, Mail, MapPin, Save, XCircle } from 'lucide-react';
+import { Supplier } from '../types';
 
-interface CustomerModalProps {
+interface SupplierModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (customer: Customer) => void;
-  initialData?: Customer | null;
+  onSave: (supplier: Supplier) => void;
+  initialData?: Supplier | null;
 }
 
-export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+export const SupplierModal: React.FC<SupplierModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -33,14 +33,14 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newCustomer: Customer = {
-      id: initialData ? initialData.id : `C${Date.now()}`,
+    const newSupplier: Supplier = {
+      id: initialData ? initialData.id : `S${Date.now()}`,
       name,
       email,
       phone,
       address,
     };
-    onSave(newCustomer);
+    onSave(newSupplier);
     onClose();
   };
 
@@ -51,8 +51,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col">
         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-xl">
           <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <User size={20} className="text-blue-600" />
-            {initialData ? 'Cập nhật khách hàng' : 'Thêm khách hàng mới'}
+            <Truck size={20} className="text-blue-600" />
+            {initialData ? 'Cập nhật NCC' : 'Thêm Nhà cung cấp'}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
             <X size={24} />
@@ -61,9 +61,9 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Họ và tên</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Tên Nhà cung cấp</label>
             <input type="text" required className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-              value={name} onChange={(e) => setName(e.target.value)} placeholder="Nhập tên khách hàng" />
+              value={name} onChange={(e) => setName(e.target.value)} placeholder="Công ty TNHH..." />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -71,7 +71,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Số điện thoại</label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input type="tel" required className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                <input type="tel" className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
                   value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
             </div>
@@ -80,7 +80,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input type="email" className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                  value={email} onChange={(e) => setEmail(e.target.value)} placeholder="example@gmail.com" />
+                  value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contact@company.com" />
               </div>
             </div>
           </div>
@@ -101,7 +101,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, o
             </button>
             <button type="submit" className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center gap-2">
               <Save size={18} />
-              {initialData ? 'Lưu thay đổi' : 'Tạo khách hàng'}
+              {initialData ? 'Lưu thay đổi' : 'Tạo NCC'}
             </button>
           </div>
         </form>

@@ -9,9 +9,11 @@ import { InventoryModal } from './components/InventoryModal';
 import { InventoryHistory } from './components/InventoryHistory';
 import { CustomerList } from './components/CustomerList';
 import { CustomerModal } from './components/CustomerModal';
+import { SupplierList } from './components/SupplierList';
+import { SupplierModal } from './components/SupplierModal';
 import { AIAssistant } from './components/AIAssistant';
 import { Auth } from './components/Auth';
-import { ViewState, Order, Product, Customer, InventoryType, UserRole, InventoryLog } from './types';
+import { ViewState, Order, Product, Customer, InventoryType, UserRole, InventoryLog, Supplier } from './types';
 import { dataService } from './services/dataService';
 import { Menu, Bell, Loader2 } from 'lucide-react';
 
@@ -25,6 +27,7 @@ const App: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [logs, setLogs] = useState<InventoryLog[]>([]);
 
   // UI State
@@ -40,6 +43,9 @@ const App: React.FC = () => {
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
   const [selectedProductForInventory, setSelectedProductForInventory] = useState<Product | null>(null);
 
@@ -53,15 +59,17 @@ const App: React.FC = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [fetchedOrders, fetchedProducts, fetchedCustomers, fetchedLogs] = await Promise.all([
+      const [fetchedOrders, fetchedProducts, fetchedCustomers, fetchedSuppliers, fetchedLogs] = await Promise.all([
         dataService.getOrders(),
         dataService.getProducts(),
         dataService.getCustomers(),
+        dataService.getSuppliers(),
         dataService.getInventoryLogs()
       ]);
       setOrders(fetchedOrders);
       setProducts(fetchedProducts);
       setCustomers(fetchedCustomers);
+      setSuppliers(fetchedSuppliers);
       setLogs(fetchedLogs);
     } catch (error) {
       console.error("Failed to load data", error);
@@ -78,19 +86,30 @@ const App: React.FC = () => {
   // --- HANDLERS: ORDERS ---
   const handleSaveOrder = async (order: Order) => {
     const isEdit = !!editingOrder;
+    // Optimistic update
     if (isEdit) setOrders(orders.map(o => o.id === order.id ? order : o));
     else setOrders([order, ...orders]);
     
     if (currentView !== 'ORDERS') setCurrentView('ORDERS');
+    
     try {
       if (isEdit) await dataService.updateOrder(order);
       else await dataService.createOrder(order);
-    } catch { loadData(); }
+    } catch (error: any) {
+      alert(`Lỗi lưu đơn hàng: ${error.message || 'Vui lòng kiểm tra lại kết nối'}`);
+      loadData(); // Revert
+    }
   };
+
   const handleDeleteOrder = async (id: string) => {
     if (!window.confirm('Xóa đơn hàng này?')) return;
     setOrders(orders.filter(o => o.id !== id));
-    try { await dataService.deleteOrder(id); } catch { loadData(); }
+    try { 
+      await dataService.deleteOrder(id); 
+    } catch (error: any) {
+      alert(`Lỗi xóa đơn hàng: ${error.message}`);
+      loadData();
+    }
   };
 
   // --- HANDLERS: PRODUCTS & INVENTORY ---
@@ -102,7 +121,10 @@ const App: React.FC = () => {
     try {
       if (isEdit) await dataService.updateProduct(product);
       else await dataService.createProduct(product);
-    } catch { loadData(); }
+    } catch (error: any) {
+      alert(`Lỗi lưu sản phẩm: ${error.message}`);
+      loadData();
+    }
   };
   
   const handleDeleteProduct = async (id: string) => {
@@ -112,54 +134,74 @@ const App: React.FC = () => {
     }
     if (!window.confirm('Xóa sản phẩm này?')) return;
     setProducts(products.filter(p => p.id !== id));
-    try { await dataService.deleteProduct(id); } catch { loadData(); }
+    try { 
+      await dataService.deleteProduct(id); 
+    } catch (error: any) {
+      alert(`Lỗi xóa sản phẩm: ${error.message}`);
+      loadData();
+    }
   };
 
   const handleInventoryUpdate = async (
-    product: Product, 
-    type: InventoryType, 
-    quantity: number, 
-    price: number,
+    items: { product: Product, quantity: number, price: number }[],
+    type: InventoryType,
     supplier: string,
     doc: string,
     note: string
   ) => {
-    const newStock = type === 'IMPORT' 
-      ? product.stock + quantity 
-      : Math.max(0, product.stock - quantity);
+    // Optimistic Update Loop
+    const updatedProducts = [...products];
+    const newLogs: InventoryLog[] = [];
+    const timestamp = new Date().toISOString();
 
-    // Tính lại giá vốn (Optimistic UI)
-    let newImportPrice = product.importPrice;
-    if (type === 'IMPORT' && price > 0) {
-       const currentVal = product.stock * product.importPrice;
-       const newVal = quantity * price;
-       if (newStock > 0) newImportPrice = (currentVal + newVal) / newStock;
+    for (const item of items) {
+       const productIndex = updatedProducts.findIndex(p => p.id === item.product.id);
+       if (productIndex === -1) continue;
+       
+       const product = updatedProducts[productIndex];
+       const newStock = type === 'IMPORT' 
+         ? product.stock + item.quantity 
+         : Math.max(0, product.stock - item.quantity);
+
+       let newImportPrice = product.importPrice;
+       if (type === 'IMPORT' && item.price > 0) {
+          const currentVal = product.stock * product.importPrice;
+          const newVal = item.quantity * item.price;
+          if (newStock > 0) newImportPrice = (currentVal + newVal) / newStock;
+       }
+
+       // Update Product Object
+       updatedProducts[productIndex] = { ...product, stock: newStock, importPrice: Math.round(newImportPrice) };
+
+       // Create Log
+       newLogs.push({
+         id: `LOG-${Date.now()}-${Math.random()}`,
+         productId: product.id,
+         productName: product.name,
+         type,
+         quantity: item.quantity,
+         oldStock: product.stock,
+         newStock,
+         price: item.price,
+         supplier,
+         referenceDoc: doc,
+         note,
+         timestamp
+       });
     }
 
-    // Optimistic Update Product
-    const updatedProduct = { ...product, stock: newStock, importPrice: Math.round(newImportPrice) };
-    setProducts(products.map(p => p.id === product.id ? updatedProduct : p));
+    setProducts(updatedProducts);
+    setLogs([...newLogs, ...logs]);
 
-    // Optimistic Update Logs
-    const newLog: InventoryLog = {
-      id: `LOG-TEMP-${Date.now()}`,
-      productId: product.id,
-      productName: product.name,
-      type,
-      quantity,
-      oldStock: product.stock,
-      newStock,
-      price,
-      supplier,
-      referenceDoc: doc,
-      note,
-      timestamp: new Date().toISOString()
-    };
-    setLogs([newLog, ...logs]);
-
+    // Async Server Update
     try {
-      await dataService.updateProductStock(product, type, quantity, price, supplier, doc, note);
-    } catch {
+      // Execute sequentially to ensure order (or Promise.all for speed)
+      for (const item of items) {
+        // We pass the *original* product here because dataService will calculate logic again
+        await dataService.updateProductStock(item.product, type, item.quantity, item.price, supplier, doc, note);
+      }
+    } catch (error: any) {
+      alert(`Lỗi cập nhật kho: ${error.message}`);
       loadData(); // Revert on fail
     }
   };
@@ -173,12 +215,47 @@ const App: React.FC = () => {
     try {
       if (isEdit) await dataService.updateCustomer(customer);
       else await dataService.createCustomer(customer);
-    } catch { loadData(); }
+    } catch (error: any) {
+      alert(`Lỗi lưu khách hàng: ${error.message}`);
+      loadData();
+    }
   };
+  
   const handleDeleteCustomer = async (id: string) => {
     if (!window.confirm('Xóa khách hàng này?')) return;
     setCustomers(customers.filter(c => c.id !== id));
-    try { await dataService.deleteCustomer(id); } catch { loadData(); }
+    try { 
+      await dataService.deleteCustomer(id); 
+    } catch (error: any) {
+      alert(`Lỗi xóa khách hàng: ${error.message}`);
+      loadData();
+    }
+  };
+
+  // --- HANDLERS: SUPPLIERS ---
+  const handleSaveSupplier = async (supplier: Supplier) => {
+    const isEdit = !!editingSupplier;
+    if (isEdit) setSuppliers(suppliers.map(s => s.id === supplier.id ? supplier : s));
+    else setSuppliers([supplier, ...suppliers]);
+
+    try {
+      if (isEdit) await dataService.updateSupplier(supplier);
+      else await dataService.createSupplier(supplier);
+    } catch (error: any) {
+      alert(`Lỗi lưu nhà cung cấp: ${error.message || 'Có thể do bảng "suppliers" chưa được tạo trong Database.'}`);
+      loadData();
+    }
+  };
+  
+  const handleDeleteSupplier = async (id: string) => {
+    if (!window.confirm('Xóa nhà cung cấp này?')) return;
+    setSuppliers(suppliers.filter(s => s.id !== id));
+    try { 
+      await dataService.deleteSupplier(id); 
+    } catch (error: any) {
+      alert(`Lỗi xóa nhà cung cấp: ${error.message}`);
+      loadData();
+    }
   };
 
   if (!isAuthenticated) return <Auth onLoginSuccess={handleLoginSuccess} />;
@@ -225,6 +302,15 @@ const App: React.FC = () => {
             onDeleteCustomer={handleDeleteCustomer}
           />
         );
+      case 'SUPPLIERS':
+        return (
+          <SupplierList
+            suppliers={suppliers}
+            onAddSupplier={() => { setEditingSupplier(null); setIsSupplierModalOpen(true); }}
+            onEditSupplier={(s) => { setEditingSupplier(s); setIsSupplierModalOpen(true); }}
+            onDeleteSupplier={handleDeleteSupplier}
+          />
+        );
       case 'AI_ASSISTANT':
         return <AIAssistant orders={orders} products={products} />;
       default: return <Dashboard userRole={userRole} orders={orders} products={products} />;
@@ -253,6 +339,7 @@ const App: React.FC = () => {
                {currentView === 'PRODUCTS' && 'Kho sản phẩm'}
                {currentView === 'INVENTORY_LOGS' && 'Lịch sử kho hàng'}
                {currentView === 'CUSTOMERS' && 'Danh sách khách hàng'}
+               {currentView === 'SUPPLIERS' && 'Danh sách Nhà cung cấp'}
              </h2>
            </div>
            <div className="flex items-center gap-3 sm:gap-6">
@@ -280,7 +367,9 @@ const App: React.FC = () => {
         isOpen={isOrderModalOpen} 
         onClose={() => setIsOrderModalOpen(false)} 
         onSave={handleSaveOrder} 
-        initialData={editingOrder} 
+        initialData={editingOrder}
+        products={products}
+        customers={customers}
       />
       <ProductModal
         isOpen={isProductModalOpen}
@@ -294,11 +383,20 @@ const App: React.FC = () => {
         onSave={handleSaveCustomer}
         initialData={editingCustomer}
       />
+      <SupplierModal
+        isOpen={isSupplierModalOpen}
+        onClose={() => setIsSupplierModalOpen(false)}
+        onSave={handleSaveSupplier}
+        initialData={editingSupplier}
+      />
       <InventoryModal
         isOpen={isInventoryModalOpen}
         onClose={() => setIsInventoryModalOpen(false)}
         onConfirm={handleInventoryUpdate}
-        product={selectedProductForInventory}
+        initialProduct={selectedProductForInventory}
+        products={products}
+        customers={customers}
+        suppliers={suppliers}
       />
     </div>
   );

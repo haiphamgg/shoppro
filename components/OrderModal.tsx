@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
-import { Order, OrderStatus, Product, OrderItem } from '../types';
-import { MOCK_PRODUCTS } from '../constants';
+import { X, Plus, Trash2, User, Save, XCircle, CheckCircle } from 'lucide-react';
+import { Order, OrderStatus, Product, OrderItem, Customer } from '../types';
 
 interface OrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (order: Order) => void;
   initialData?: Order | null;
+  products: Product[];
+  customers: Customer[]; // Add customers prop
 }
 
-export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave, initialData, products, customers }) => {
   const [customerName, setCustomerName] = useState('');
   const [status, setStatus] = useState<OrderStatus>(OrderStatus.PENDING);
   const [items, setItems] = useState<OrderItem[]>([]);
   
-  // Initialize form when opening
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
@@ -23,7 +23,6 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
         setStatus(initialData.status);
         setItems(initialData.items);
       } else {
-        // Reset for new order
         setCustomerName('');
         setStatus(OrderStatus.PENDING);
         setItems([]);
@@ -32,8 +31,8 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
   }, [isOpen, initialData]);
 
   const handleAddItem = () => {
-    // Default to first product for simplicity in this demo
-    const product = MOCK_PRODUCTS[0];
+    if (products.length === 0) return;
+    const product = products[0];
     setItems([
       ...items,
       { productId: product.id, productName: product.name, quantity: 1, price: product.price }
@@ -43,7 +42,7 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
   const handleUpdateItem = (index: number, field: keyof OrderItem, value: any) => {
     const newItems = [...items];
     if (field === 'productId') {
-      const product = MOCK_PRODUCTS.find(p => p.id === value);
+      const product = products.find(p => p.id === value);
       if (product) {
         newItems[index] = { ...newItems[index], productId: product.id, productName: product.name, price: product.price };
       }
@@ -61,11 +60,20 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
     return items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
 
+  const handleCustomerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setCustomerName(val);
+    // Auto-fill logic if needed, e.g. finding the ID
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Find customer ID if exists in list
+    const existingCustomer = customers.find(c => c.name === customerName);
+    
     const newOrder: Order = {
-      id: initialData ? initialData.id : `ORD-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`,
-      customerId: initialData ? initialData.customerId : `C${Math.floor(Math.random() * 1000)}`, // Mock ID
+      id: initialData ? initialData.id : `ORD-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`,
+      customerId: existingCustomer ? existingCustomer.id : (initialData ? initialData.customerId : `GUEST-${Date.now()}`),
       customerName,
       items,
       totalAmount: calculateTotal(),
@@ -93,15 +101,24 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tên khách hàng</label>
-              <input
-                type="text"
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Nhập tên khách hàng"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Khách hàng</label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  list="customer-list-order"
+                  required
+                  className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  value={customerName}
+                  onChange={handleCustomerSelect}
+                  placeholder="Tìm hoặc nhập tên khách hàng"
+                />
+                <datalist id="customer-list-order">
+                  {customers.map(c => (
+                    <option key={c.id} value={c.name}>{c.phone}</option>
+                  ))}
+                </datalist>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
@@ -119,7 +136,7 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
 
           <div>
             <div className="flex justify-between items-center mb-2">
-              <label className="block text-sm font-medium text-gray-700">Sản phẩm</label>
+              <label className="block text-sm font-medium text-gray-700">Chi tiết đơn hàng</label>
               <button
                 type="button"
                 onClick={handleAddItem}
@@ -131,26 +148,26 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
             
             <div className="space-y-3">
               {items.length === 0 ? (
-                <div className="p-4 border-2 border-dashed border-gray-200 rounded-lg text-center text-gray-500 text-sm">
-                  Chưa có sản phẩm nào. Nhấn "Thêm sản phẩm" để bắt đầu.
+                <div className="p-8 border-2 border-dashed border-gray-200 rounded-lg text-center text-gray-400 text-sm">
+                  Chưa có sản phẩm nào. Nhấn "Thêm sản phẩm" để bắt đầu bán hàng.
                 </div>
               ) : (
                 items.map((item, index) => (
-                  <div key={index} className="flex gap-3 items-end bg-gray-50 p-3 rounded-lg">
+                  <div key={index} className="flex gap-3 items-end bg-gray-50 p-3 rounded-lg border border-gray-100">
                     <div className="flex-1">
-                      <label className="text-xs text-gray-500 mb-1 block">Tên sản phẩm</label>
+                      <label className="text-[10px] text-gray-500 mb-1 block uppercase font-semibold">Sản phẩm</label>
                       <select
-                        className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-blue-500 outline-none"
+                        className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-blue-500 outline-none bg-white"
                         value={item.productId}
                         onChange={(e) => handleUpdateItem(index, 'productId', e.target.value)}
                       >
-                        {MOCK_PRODUCTS.map(p => (
-                          <option key={p.id} value={p.id}>{p.name} - {p.price.toLocaleString()}đ</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>{p.name} (Tồn: {p.stock})</option>
                         ))}
                       </select>
                     </div>
                     <div className="w-20">
-                      <label className="text-xs text-gray-500 mb-1 block">SL</label>
+                      <label className="text-[10px] text-gray-500 mb-1 block uppercase font-semibold">Số lượng</label>
                       <input
                         type="number"
                         min="1"
@@ -165,7 +182,7 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
                     <button
                       type="button"
                       onClick={() => handleRemoveItem(index)}
-                      className="text-red-500 hover:bg-red-50 p-2 rounded transition-colors mb-0.5"
+                      className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded transition-colors mb-0.5"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -176,7 +193,7 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
           </div>
 
           <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-            <span className="text-lg font-bold text-gray-800">Tổng cộng:</span>
+            <span className="text-lg font-bold text-gray-800">Tổng thanh toán:</span>
             <span className="text-2xl font-bold text-blue-600">{calculateTotal().toLocaleString()}đ</span>
           </div>
         </form>
@@ -185,15 +202,17 @@ export const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSave,
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-100 transition-colors"
+            className="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-100 transition-colors flex items-center gap-2"
           >
+            <XCircle size={18} />
             Hủy bỏ
           </button>
           <button
             onClick={handleSubmit}
-            className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-sm transition-colors"
+            className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-sm transition-colors flex items-center gap-2"
           >
-            {initialData ? 'Lưu thay đổi' : 'Tạo đơn hàng'}
+            {initialData ? <Save size={18} /> : <CheckCircle size={18} />}
+            {initialData ? 'Lưu đơn hàng' : 'Hoàn tất đơn hàng'}
           </button>
         </div>
       </div>
