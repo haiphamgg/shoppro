@@ -228,9 +228,9 @@ export const dataService = {
     const { data, error } = await supabase.from('orders').insert([{ ...row, id: order.id }]).select().single();
     if (error) throw error;
     
-    // Update spending if order is valid
-    if (order.customerId && order.customerId !== 'GUEST' && order.status !== OrderStatus.CANCELLED) {
-       await this._incrementCustomerSpending(order.customerId, order.finalAmount || order.totalAmount);
+    // Auto Recalculate Spending for this customer to be accurate
+    if (order.customerId && order.customerId !== 'GUEST') {
+        await this.recalculateSingleCustomerSpending(order.customerId);
     }
 
     if (!data) throw new Error("Tạo đơn hàng thành công nhưng không nhận được phản hồi.");
@@ -240,11 +240,6 @@ export const dataService = {
   async updateOrder(order: Order): Promise<Order> {
     if (!isSupabaseConfigured) return order;
     
-    // Fetch old order to see difference
-    const { data: oldOrderData } = await supabase.from('orders').select('final_amount, total_amount, status').eq('id', order.id).single();
-    const oldAmount = oldOrderData ? (oldOrderData.final_amount || oldOrderData.total_amount || 0) : 0;
-    const oldStatus = oldOrderData ? oldOrderData.status : null;
-
     const row = mapOrderToRow(order);
     const { data, error } = await supabase.from('orders')
       .update({ 
@@ -259,56 +254,26 @@ export const dataService = {
       .eq('id', order.id).select().single();
     if (error) throw error;
 
-    // Adjust spending logic
+    // Auto Recalculate Spending for this customer
     if (order.customerId && order.customerId !== 'GUEST') {
-        const newAmount = order.finalAmount || order.totalAmount;
-        let change = 0;
-
-        // Logic: 
-        // 1. If cancelled now but was active -> subtract old amount
-        // 2. If active now but was cancelled -> add new amount
-        // 3. If active before and active now -> add difference (new - old)
-
-        const isActive = (s: string) => s !== OrderStatus.CANCELLED;
-
-        if (isActive(order.status) && isActive(oldStatus)) {
-            change = newAmount - oldAmount;
-        } else if (!isActive(order.status) && isActive(oldStatus)) {
-            change = -oldAmount;
-        } else if (isActive(order.status) && !isActive(oldStatus)) {
-            change = newAmount;
-        }
-
-        if (change !== 0) {
-            await this._incrementCustomerSpending(order.customerId, change);
-        }
+        await this.recalculateSingleCustomerSpending(order.customerId);
     }
 
     if (!data) throw new Error("Cập nhật đơn hàng thành công nhưng không nhận được phản hồi.");
     return mapRowToOrder(data);
   },
 
-  async _incrementCustomerSpending(customerId: string, amount: number) {
-      if (!amount) return;
-      const { data } = await supabase.from('customers').select('total_spending').eq('id', customerId).single();
-      if (data) {
-          const current = Number(data.total_spending) || 0;
-          await supabase.from('customers').update({ total_spending: current + amount }).eq('id', customerId);
-      }
-  },
-
   async deleteOrder(id: string): Promise<void> {
     if (!isSupabaseConfigured) return;
     
-    // Get order before delete to subtract spending
-    const { data: order } = await supabase.from('orders').select('customer_id, final_amount, total_amount, status').eq('id', id).single();
+    // Get customerId before delete
+    const { data: order } = await supabase.from('orders').select('customer_id').eq('id', id).single();
     
     const { error } = await supabase.from('orders').delete().eq('id', id);
     if (error) throw error;
 
-    if (order && order.customer_id && order.status !== OrderStatus.CANCELLED) {
-        const amount = order.final_amount || order.total_amount || 0;
-        await this._incrementCustomerSpending(order.customer_id, -amount);
+    if (order && order.customer_id) {
+        await this.recalculateSingleCustomerSpending(order.customer_id);
     }
   },
 
@@ -345,30 +310,94 @@ export const dataService = {
     if (error) throw error;
   },
 
+  // Calculate spending for a single customer (Real-time accuracy)
+  async recalculateSingleCustomerSpending(customerId: string): Promise<void> {
+      if (!isSupabaseConfigured || !customerId || customerId === 'GUEST') return;
+
+      // 1. Get Customer Name for Log Matching
+      const { data: customer } = await supabase.from('customers').select('name').eq('id', customerId).single();
+      const customerName = customer ? customer.name.trim().toLowerCase() : '';
+
+      let totalSpending = 0;
+
+      // 2. Sum DELIVERED Orders
+      const { data: orders } = await supabase.from('orders')
+          .select('final_amount, total_amount')
+          .eq('customer_id', customerId)
+          .eq('status', OrderStatus.DELIVERED);
+      
+      if (orders) {
+          totalSpending += orders.reduce((sum, o) => sum + (Number(o.final_amount) || Number(o.total_amount) || 0), 0);
+      }
+
+      // 3. Sum EXPORT Logs (Manual Sales matching Name)
+      if (customerName) {
+          // Note: In a real app, strict linking via ID is better, but logs currently use Name
+          const { data: logs } = await supabase.from('inventory_logs')
+              .select('quantity, price, supplier')
+              .eq('type', 'EXPORT');
+          
+          if (logs) {
+              const matchedLogs = logs.filter((l: any) => 
+                  l.supplier && l.supplier.trim().toLowerCase() === customerName
+              );
+              totalSpending += matchedLogs.reduce((sum: number, l: any) => sum + ((Number(l.price) || 0) * (Number(l.quantity) || 0)), 0);
+          }
+      }
+
+      // 4. Update
+      await supabase.from('customers').update({ total_spending: totalSpending }).eq('id', customerId);
+  },
+
+  // Bulk Recalculate (The "Fix It" button)
   async recalculateAllCustomerSpending(): Promise<void> {
      if (!isSupabaseConfigured) return;
      
-     // 1. Reset all to 0
-     await supabase.from('customers').update({ total_spending: 0 }).neq('id', 'x');
-
-     // 2. Calculate sum from orders (simplified approach, ideally use a SQL function)
-     const { data: orders } = await supabase.from('orders')
-        .select('customer_id, final_amount, total_amount')
-        .neq('status', OrderStatus.CANCELLED)
-        .not('customer_id', 'is', null);
-     
-     if (!orders) return;
+     // 1. Fetch all customers to map Name -> ID (for Logs) and init map
+     const { data: customers } = await supabase.from('customers').select('id, name');
+     if (!customers) return;
 
      const spendingMap: Record<string, number> = {};
-     orders.forEach((o: any) => {
-         const cid = o.customer_id;
-         const amt = Number(o.final_amount) || Number(o.total_amount) || 0;
-         if (cid && cid !== 'GUEST') {
-             spendingMap[cid] = (spendingMap[cid] || 0) + amt;
-         }
+     const nameToIdMap: Record<string, string> = {};
+
+     customers.forEach(c => {
+         spendingMap[c.id] = 0; // Initialize all to 0
+         if (c.name) nameToIdMap[c.name.trim().toLowerCase()] = c.id;
      });
 
-     // 3. Update in batches (doing individually for simplicity here, but could be optimized)
+     // 2. Calculate from ORDERS (Only 'Đã giao')
+     const { data: orders } = await supabase.from('orders')
+        .select('customer_id, final_amount, total_amount, status')
+        .eq('status', OrderStatus.DELIVERED); // Strict Filter
+
+     if (orders) {
+         orders.forEach((o: any) => {
+             const cid = o.customer_id;
+             const amt = Number(o.final_amount) || Number(o.total_amount) || 0;
+             if (cid && spendingMap[cid] !== undefined) {
+                 spendingMap[cid] += amt;
+             }
+         });
+     }
+
+     // 3. Calculate from INVENTORY LOGS (Type 'EXPORT' -> Manual Sales)
+     const { data: logs } = await supabase.from('inventory_logs')
+        .select('supplier, price, quantity, type')
+        .eq('type', 'EXPORT');
+
+     if (logs) {
+         logs.forEach((l: any) => {
+             const customerName = l.supplier ? l.supplier.trim().toLowerCase() : '';
+             const cid = nameToIdMap[customerName];
+             // Only count if we found a matching customer
+             if (cid && spendingMap[cid] !== undefined) {
+                 const amt = (Number(l.price) || 0) * (Number(l.quantity) || 0);
+                 spendingMap[cid] += amt;
+             }
+         });
+     }
+
+     // 4. Update in batches (Sequential to avoid rate limits on massive lists, though parallel is fine for <1000)
      const updates = Object.entries(spendingMap).map(([id, total]) => 
         supabase.from('customers').update({ total_spending: total }).eq('id', id)
      );
@@ -531,6 +560,14 @@ export const dataService = {
     }]);
     
     if (logError) throw new Error(`Ghi nhận lịch sử thất bại: ${logError.message}`);
+
+    // If EXPORT (Manual Sale), try to update Customer Spending immediately if matches a customer name
+    if (type === 'EXPORT' && supplier) {
+        const { data: customer } = await supabase.from('customers').select('id').eq('name', supplier).single();
+        if (customer) {
+            await this.recalculateSingleCustomerSpending(customer.id);
+        }
+    }
   },
 
   async deleteProduct(id: string): Promise<void> {
