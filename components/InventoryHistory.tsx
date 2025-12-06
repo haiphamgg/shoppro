@@ -10,6 +10,15 @@ const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 };
 
+const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+};
+
 export const InventoryHistory: React.FC<InventoryHistoryProps> = ({ logs }) => {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[calc(100vh-8.5rem)] overflow-hidden">
@@ -27,7 +36,7 @@ export const InventoryHistory: React.FC<InventoryHistoryProps> = ({ logs }) => {
               <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Chi tiết SL/Giá</th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Chứng từ/NCC</th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Biến động tồn</th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Thời gian</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">Ngày giao dịch</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-50">
@@ -79,7 +88,7 @@ export const InventoryHistory: React.FC<InventoryHistoryProps> = ({ logs }) => {
                   <td className="px-6 py-4 text-sm text-slate-500">
                     <div className="flex items-center gap-1.5">
                       <Calendar size={14} className="text-slate-400" />
-                      {new Date(log.timestamp).toLocaleString('vi-VN')}
+                      {formatDate(log.date || log.timestamp)}
                     </div>
                   </td>
                 </tr>

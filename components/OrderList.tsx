@@ -24,6 +24,16 @@ const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 };
 
+// Date formatter dd/mm/yyyy
+const formatDate = (dateString: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const d = date.getDate().toString().padStart(2, '0');
+  const m = (date.getMonth() + 1).toString().padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}/${m}/${y}`;
+};
+
 export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDeleteOrder, onEditOrder }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -110,7 +120,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDele
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                      {new Date(order.date).toLocaleDateString('vi-VN')}
+                      {formatDate(order.date)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
                       {formatCurrency(order.totalAmount)}
@@ -178,7 +188,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onAddOrder, onDele
                 <div className="flex items-center gap-4 text-sm text-slate-500 mb-3 pb-3 border-b border-slate-50">
                   <div className="flex items-center gap-1.5">
                     <Calendar size={14} />
-                    {new Date(order.date).toLocaleDateString('vi-VN')}
+                    {formatDate(order.date)}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Package size={14} />

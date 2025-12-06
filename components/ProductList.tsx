@@ -14,6 +14,15 @@ const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 };
 
+const formatDate = (dateString: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const d = date.getDate().toString().padStart(2, '0');
+  const m = (date.getMonth() + 1).toString().padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}/${m}/${y}`;
+};
+
 const isImageUrl = (url: string) => {
     if (!url) return false;
     return /\.(jpg|jpeg|png|webp|gif|bmp|svg)$/i.test(url) || url.startsWith('data:image');
@@ -154,7 +163,7 @@ export const ProductList: React.FC<ProductListProps> = ({ products, onAddProduct
                          {product.expiryDate && (
                              <div className={`text-xs flex items-center gap-1.5 font-medium ${expired ? 'text-red-600' : (expiring ? 'text-amber-600' : 'text-green-600')}`}>
                                 <Calendar size={12} /> 
-                                HSD: {new Date(product.expiryDate).toLocaleDateString('vi-VN')}
+                                HSD: {formatDate(product.expiryDate)}
                              </div>
                          )}
                       </div>
@@ -167,7 +176,7 @@ export const ProductList: React.FC<ProductListProps> = ({ products, onAddProduct
                         <div className="text-right">
                           <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">Tồn kho</p>
                           <div className={`font-bold text-lg ${product.stock < 10 ? 'text-red-500' : 'text-slate-700'}`}>
-                            {product.stock}
+                            {product.stock} <span className="text-xs font-normal text-slate-500">{product.unit || 'Cái'}</span>
                           </div>
                         </div>
                       </div>

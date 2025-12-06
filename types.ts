@@ -37,6 +37,7 @@ export interface Product {
   code: string; // Business ID (e.g. P001)
   name: string;
   model?: string; // Mẫu mã / Model
+  unit?: string; // Đơn vị tính (Cái, Hộp, Kg...)
   price: number; // Giá bán
   importPrice: number; // Giá vốn (Giá nhập bình quân)
   stock: number;
@@ -90,5 +91,6 @@ export interface InventoryLog {
   supplier?: string; // Nhà cung cấp hoặc Khách hàng/Bộ phận nhận
   referenceDoc?: string; // Mã phiếu/Hóa đơn
   note: string;
-  timestamp: string;
+  date: string; // Ngày ghi nhận trên phiếu (User input)
+  timestamp: string; // Thời gian tạo hệ thống
 }

@@ -25,12 +25,16 @@ const SystemSettings: React.FC = () => {
 ALTER TABLE products ADD COLUMN IF NOT EXISTS import_price NUMERIC DEFAULT 0;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS code TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS unit TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMPTZ;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS batch_number TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_url TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS origin TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+-- Cập nhật bảng Inventory Logs
+ALTER TABLE inventory_logs ADD COLUMN IF NOT EXISTS date TIMESTAMPTZ DEFAULT now();
 
 -- Sửa lỗi ID không tự động tạo (Optional)
 ALTER TABLE products ALTER COLUMN id SET DEFAULT gen_random_uuid();
@@ -264,7 +268,8 @@ const App: React.FC = () => {
     type: InventoryType,
     supplier: string,
     doc: string,
-    note: string
+    note: string,
+    date: string // New param
   ) => {
     // Optimistic Update Loop
     const updatedProducts = [...products];
@@ -303,7 +308,8 @@ const App: React.FC = () => {
          supplier,
          referenceDoc: doc,
          note,
-         timestamp
+         timestamp,
+         date: date || timestamp
        });
     }
 
@@ -314,7 +320,7 @@ const App: React.FC = () => {
     try {
       // Execute sequentially to ensure order
       for (const item of items) {
-        await dataService.updateProductStock(item.product, type, item.quantity, item.price, supplier, doc, note);
+        await dataService.updateProductStock(item.product, type, item.quantity, item.price, supplier, doc, note, date);
       }
     } catch (error: any) {
       handleSaveError(error, 'Cập nhật kho');
@@ -502,6 +508,7 @@ const App: React.FC = () => {
         onClose={() => setIsProductModalOpen(false)}
         onSave={handleSaveProduct}
         initialData={editingProduct}
+        products={products}
       />
       <CustomerModal
         isOpen={isCustomerModalOpen}

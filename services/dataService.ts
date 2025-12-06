@@ -40,6 +40,7 @@ const mapRowToProduct = (row: any): Product => ({
   code: row.code || '',
   name: row.name,
   model: row.model || '',
+  unit: row.unit || 'Cái',
   price: Number(row.price) || 0,
   importPrice: Number(row.import_price) || 0,
   stock: Number(row.stock) || 0,
@@ -57,6 +58,7 @@ const mapProductToRow = (product: Product) => ({
   code: product.code,
   name: product.name,
   model: product.model || null,
+  unit: product.unit || 'Cái',
   price: product.price,
   import_price: product.importPrice,
   stock: product.stock,
@@ -117,6 +119,7 @@ const mapRowToLog = (row: any): InventoryLog => ({
   supplier: row.supplier,
   referenceDoc: row.reference_doc,
   note: row.note,
+  date: row.date || row.created_at, // Use date column or fallback to created_at
   timestamp: row.created_at
 });
 
@@ -224,6 +227,7 @@ export const dataService = {
     // 2. FALLBACK DETECTION
     console.warn("Full insert failed. Trying fallback mode...", error);
     
+    // REMOVED 'model' from safeFallbackRow to prevent "Could not find column" errors if DB is outdated
     const safeFallbackRow = {
         id: dbId,
         name: product.name,
@@ -231,8 +235,6 @@ export const dataService = {
         stock: product.stock,
         category: product.category,
         image_url: product.imageUrl,
-        // Optional safe fields
-        model: product.model || null
     };
     
     try {
@@ -259,9 +261,9 @@ export const dataService = {
     
     if (error) {
          console.warn("Update schema mismatch. Retrying with legacy fields...");
+         // Removed 'model' from fallback update as well
          const fallbackRow = {
             name: product.name,
-            model: product.model,
             price: product.price,
             stock: product.stock,
             category: product.category,
@@ -284,7 +286,8 @@ export const dataService = {
     transactionPrice: number, 
     supplier: string, 
     referenceDoc: string, 
-    note: string
+    note: string,
+    date: string // New parameter for transaction date
   ): Promise<void> {
     const newStock = type === 'IMPORT' ? product.stock + quantity : product.stock - quantity;
     let newImportPrice = product.importPrice;
@@ -301,6 +304,7 @@ export const dataService = {
 
     if (!isSupabaseConfigured) return;
 
+    // Update Product Stock
     const { error: prodError } = await supabase.from('products')
       .update({ 
         stock: newStock,
@@ -309,12 +313,14 @@ export const dataService = {
       .eq('id', product.id);
       
     if (prodError) {
+         // Fallback if import_price column missing
          const { error: fallbackError } = await supabase.from('products')
           .update({ stock: newStock })
           .eq('id', product.id);
          if (fallbackError) throw fallbackError;
     }
 
+    // Insert Log with user-selected DATE
     const { error: logError } = await supabase.from('inventory_logs').insert([{
       product_id: product.id,
       type,
@@ -324,7 +330,8 @@ export const dataService = {
       price: transactionPrice,
       supplier: supplier || null,
       reference_doc: referenceDoc || null,
-      note: note || null
+      note: note || null,
+      date: date || new Date().toISOString() // Save the transaction date
     }]);
     
     if (logError) console.error("Error logging inventory", logError);
@@ -343,7 +350,7 @@ export const dataService = {
       const { data, error } = await supabase
         .from('inventory_logs')
         .select(`*, products(name)`)
-        .order('created_at', { ascending: false });
+        .order('date', { ascending: false }); // Sort by transaction date instead of created_at
       
       if (error) return MOCK_LOGS;
       return data.map(mapRowToLog);

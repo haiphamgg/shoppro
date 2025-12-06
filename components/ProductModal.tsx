@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Package, DollarSign, Layers, Tag, Globe, Upload, Image as ImageIcon, Loader2, TrendingUp, Save, XCircle, FileText, Link as LinkIcon, Box, FileUp, CheckCircle, Barcode, RefreshCw, Download, Printer, ScanBarcode, UploadCloud, Cpu, Eye } from 'lucide-react';
+import { X, Package, DollarSign, Layers, Tag, Globe, Upload, Image as ImageIcon, Loader2, TrendingUp, Save, XCircle, FileText, Link as LinkIcon, Box, FileUp, CheckCircle, Barcode, RefreshCw, Download, Printer, ScanBarcode, UploadCloud, Cpu, Eye, Scale } from 'lucide-react';
 import { Product } from '../types';
 import { dataService } from '../services/dataService';
 
@@ -8,6 +8,7 @@ interface ProductModalProps {
   onClose: () => void;
   onSave: (product: Product) => void;
   initialData?: Product | null;
+  products: Product[]; // Passed to suggest origins
 }
 
 // Utility to format number with thousand separator
@@ -25,10 +26,11 @@ const isImageUrl = (url: string) => {
     return /\.(jpg|jpeg|png|webp|gif|bmp|svg)$/i.test(url) || url.startsWith('data:image');
 };
 
-export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, initialData, products }) => {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [model, setModel] = useState('');
+  const [unit, setUnit] = useState('Cái');
   const [price, setPrice] = useState<number>(0);
   const [importPrice, setImportPrice] = useState<number>(0);
   const [stock, setStock] = useState<number>(0);
@@ -49,6 +51,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
   const fileInputRef = useRef<HTMLInputElement>(null);
   const catalogInputRef = useRef<HTMLInputElement>(null);
 
+  // Get unique origins for autocomplete
+  const uniqueOrigins = Array.from(new Set(products.map(p => p.origin).filter(Boolean)));
+  // Common units
+  const commonUnits = ['Cái', 'Bộ', 'Hộp', 'Chai', 'Kg', 'Mét', 'Lít', 'Gói', 'Thùng', 'Lon'];
+
   // Generate a random code like P839210
   const generateCode = () => {
     const randomNum = Math.floor(100000 + Math.random() * 900000);
@@ -61,6 +68,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
         setCode(initialData.code || '');
         setName(initialData.name);
         setModel(initialData.model || '');
+        setUnit(initialData.unit || 'Cái');
         setPrice(initialData.price);
         setImportPrice(initialData.importPrice || 0);
         setStock(initialData.stock);
@@ -83,6 +91,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
         setCode(generateCode());
         setName('');
         setModel('');
+        setUnit('Cái');
         setPrice(0);
         setImportPrice(0);
         setStock(0);
@@ -154,6 +163,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
         code: finalCode,
         name,
         model,
+        unit,
         price: Number(price) || 0,
         importPrice: Number(importPrice) || 0,
         stock: Number(stock) || 0,
@@ -316,21 +326,25 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                         className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
                         value={model}
                         onChange={(e) => setModel(e.target.value)}
-                        placeholder="VD: 2024, Slim..."
+                        placeholder="VD: 2024..."
                         />
                     </div>
                   </div>
                   <div className="col-span-1">
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Nước SX</label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Đơn vị tính</label>
                     <div className="relative">
-                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <Scale className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input
-                        type="text"
-                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                        value={origin}
-                        onChange={(e) => setOrigin(e.target.value)}
-                        placeholder="Việt Nam"
+                            type="text"
+                            list="unit-list"
+                            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                            value={unit}
+                            onChange={(e) => setUnit(e.target.value)}
+                            placeholder="Cái"
                         />
+                        <datalist id="unit-list">
+                            {commonUnits.map((u) => <option key={u} value={u} />)}
+                        </datalist>
                     </div>
                   </div>
                 </div>
@@ -343,15 +357,23 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                     </h4>
                     <div className="grid grid-cols-3 gap-4">
                         <div>
-                            <label className="block text-xs font-medium text-slate-500 mb-1">Tồn kho ban đầu</label>
-                            <input
-                                type="number"
-                                min="0"
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none text-sm bg-white"
-                                value={stock}
-                                onChange={(e) => setStock(Number(e.target.value))}
-                                disabled={!!initialData} 
-                            />
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Nước SX</label>
+                            <div className="relative">
+                                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                <input
+                                    type="text"
+                                    list="origin-list"
+                                    className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none text-sm bg-white"
+                                    value={origin}
+                                    onChange={(e) => setOrigin(e.target.value)}
+                                    placeholder="Việt Nam"
+                                />
+                                <datalist id="origin-list">
+                                    {uniqueOrigins.map((org, index) => (
+                                        <option key={index} value={org} />
+                                    ))}
+                                </datalist>
+                            </div>
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-slate-500 mb-1">Số lô / Batch</label>

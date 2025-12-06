@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle, AlertTriangle, Camera } from 'lucide-react';
+import { X, ArrowDownCircle, ArrowUpCircle, Package, DollarSign, FileText, Truck, User, Plus, Trash2, Search, CheckCircle, AlertTriangle, Camera, Calendar } from 'lucide-react';
 import { Product, InventoryType, Customer, Supplier } from '../types';
 import { QRScanner } from './QRScanner';
 
@@ -12,7 +12,7 @@ interface InventoryItem {
 interface InventoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (items: { product: Product, quantity: number, price: number }[], type: InventoryType, supplier: string, doc: string, note: string) => void;
+  onConfirm: (items: { product: Product, quantity: number, price: number }[], type: InventoryType, supplier: string, doc: string, note: string, date: string) => void;
   initialProduct: Product | null;
   products: Product[];
   customers: Customer[];
@@ -38,6 +38,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
   const [supplier, setSupplier] = useState('');
   const [referenceDoc, setReferenceDoc] = useState('');
   const [note, setNote] = useState('');
+  const [date, setDate] = useState('');
   
   // Search state for adding items
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,6 +51,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
       setReferenceDoc('');
       setNote('');
       setCart([]);
+      setDate(new Date().toISOString().split('T')[0]); // Default to today
       setShowScanner(false);
       
       if (initialProduct) {
@@ -109,7 +111,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
       }
     }
 
-    onConfirm(cart, type, supplier, referenceDoc, note);
+    onConfirm(cart, type, supplier, referenceDoc, note, date);
     onClose();
   };
 
@@ -170,6 +172,19 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
 
                 {/* General Inputs */}
                 <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Ngày chứng từ/Giao dịch</label>
+                        <div className="relative">
+                            <Calendar className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                            <input
+                                type="date"
+                                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
                             {type === 'IMPORT' ? 'Nhà cung cấp' : 'Khách hàng / Người nhận'}
@@ -293,7 +308,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                              {item.product.name} {item.product.model && <span className="text-slate-500 font-normal">({item.product.model})</span>}
                                          </h4>
                                          <p className={`text-xs ${isError ? 'text-red-600 font-bold' : 'text-slate-500'}`}>
-                                            Tồn hiện tại: {item.product.stock}
+                                            Tồn hiện tại: {item.product.stock} {item.product.unit}
                                          </p>
                                      </div>
                                      <div className="flex items-start gap-3">

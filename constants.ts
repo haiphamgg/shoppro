@@ -111,7 +111,8 @@ export const MOCK_LOGS: InventoryLog[] = [
     oldStock: 0,
     newStock: 50,
     note: 'Nhập nguyên liệu đầu ngày',
-    timestamp: '2023-10-01T08:00:00Z'
+    timestamp: '2023-10-01T08:00:00Z',
+    date: '2023-10-01T08:00:00Z'
   }
 ];
 

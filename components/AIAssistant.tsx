@@ -74,6 +74,12 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ orders, products }) =>
     "Viết email xin lỗi khách hàng vì giao hàng chậm.",
     "Phân tích xu hướng đơn hàng gần đây."
   ];
+  
+  const formatTime = (date: Date) => {
+      const h = date.getHours().toString().padStart(2, '0');
+      const m = date.getMinutes().toString().padStart(2, '0');
+      return `${h}:${m}`;
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-[calc(100vh-8rem)] overflow-hidden">
@@ -109,7 +115,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ orders, products }) =>
             }`}>
               <div className="whitespace-pre-wrap">{msg.content}</div>
               <div className={`text-[10px] mt-2 opacity-70 ${msg.role === 'user' ? 'text-gray-400' : 'text-blue-100'}`}>
-                {msg.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                {formatTime(msg.timestamp)}
               </div>
             </div>
           </div>
